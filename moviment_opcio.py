@@ -43,7 +43,7 @@ class MovimentNode(Node):
         # Aquest callback només escolta el node de l'odometria
         self.objectes = msg.data
         if self.objectes >= 5:
-            self.estat = 99 # Estat final, aturem-ho tot
+            self.estat = None # Estat final, aturem-ho tot
             self.get_logger().info('Objectiu complert: 5 objectes trobats!')
 
     def laser_callback(self, msg):
@@ -59,7 +59,7 @@ class MovimentNode(Node):
         cmd.header.frame_id = 'base_link'
 
         # --- ESTAT FINAL (ATURAT) ---
-        if self.estat == 99:
+        if self.estat == None:
             cmd.twist.linear.x = 0.0
             cmd.twist.angular.z = 0.0
             self.pub.publish(cmd)
