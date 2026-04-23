@@ -1,147 +1,172 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import TwistStamped
 from std_msgs.msg import Int32
-import math
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 class MovimentNode(Node):
     def __init__(self):
         super().__init__('controlador_moviment')
         
-        # --- MÀQUINA D'ESTATS ---
-        self.estat = 'AVANÇAR'
-        self.comptador_obstacles = 0
+        # QoS per al sensor (Segons Pràctica 4 i 5)
+        qos_sensor = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10
+        )
         
-        # Variables de memòria per les maniobres basades en temps
-        self.temps_inici_estat = self.get_clock().now()
-        self.direccio_s = 1 # 1 per començar la "S" girant a l'esquerra, -1 per la dreta
+        # QoS per al moviment (Segons Pràctica 5)
+        qos_moviment = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10
+        )
         
-        # --- COMUNICACIÓ ---
-        self.sub_laser = self.create_subscription(LaserScan, '/scan', self.laser_cb, 10)
+        # 1. Subscripcions i Publicador
+        self.sub_laser = self.create_subscription(LaserScan, '/scan', self.laser_callback, qos_sensor)
+        self.sub_comptador = self.create_subscription(Int32, '/comptador_obstacles', self.comptador_callback, 10)
+        self.pub = self.create_publisher(TwistStamped, '/cmd_vel', qos_moviment)
         
-        # Ens subscrivim al tòpic on l'altre fitxer publicarà quants objectes ha validat
-        self.sub_comptador = self.create_subscription(Int32, '/comptador_obstacles', self.comptador_cb, 10)
-        
-        self.pub_cmd = self.create_publisher(TwistStamped, '/cmd_vel', 10)
-        
-        self.get_logger().info('🚗 Node de moviment actiu. Mode exploració en S i esquiva iniciat.')
+        self.get_logger().info('Vigilant de moviment actiu...')
 
-    def comptador_cb(self, msg):
-        """Aquest callback rep el recompte des de l'altre fitxer (el cartògraf)"""
-        self.comptador_obstacles = msg.data
-        if self.comptador_obstacles >= 5 and self.estat != 'ATURAT':
-            self.get_logger().info('🛑 Hem rebut el senyal de 5 obstacles! Aturant el robot.')
-            self.canviar_estat('ATURAT')
+        # 2. Variables de la classe (Pista: Estat del Robot)
+        self.estat = 0       # 0=Avançar, 1=Girant_S, 2=Canvi_Fila, 10=Esquivar...
+        self.cicles = 0      # Pista: Comptador de cicles (1 cicle = 0.1s)
+        self.direccio_s = 1  # 1 = Esquerra, -1 = Dreta (per la S)
+        self.objectes = 0    # Guardar quants objectes portem
 
-    def canviar_estat(self, nou_estat):
-        """Funció d'ajuda per canviar d'estat i reiniciar el cronòmetre"""
-        self.estat = nou_estat
-        self.temps_inici_estat = self.get_clock().now()
-        self.get_logger().info(f'🔄 Canvi d\'estat: {nou_estat}')
+    def comptador_callback(self, msg):
+        # Aquest callback només escolta el node de l'odometria
+        self.objectes = msg.data
+        if self.objectes >= 5:
+            self.estat = 99 # Estat final, aturem-ho tot
+            self.get_logger().info('Objectiu complert: 5 objectes trobats!')
 
-    def obtenir_temps_estat(self):
-        """Retorna quants segons portem en l'estat actual"""
-        return (self.get_clock().now() - self.temps_inici_estat).nanoseconds / 1e9
-
-    def crear_cmd(self):
-        cmd = TwistStamped()
-        cmd.header.stamp = self.get_clock().now().to_msg()
-        cmd.header.frame_id = 'base_link'
-        return cmd
-
-    def laser_cb(self, msg):
-        cmd = self.crear_cmd()
-        
-        if self.estat == 'ATURAT':
-            cmd.twist.linear.x = 0.0
-            cmd.twist.angular.z = 0.0
-            self.pub_cmd.publish(cmd)
+    def laser_callback(self, msg):
+        # Evitem problemes si el laser no està actiu o dona errors d'inici
+        if len(msg.ranges) == 0:
             return
 
-        # 1. MODO AVANÇAR: Busquem obstacles
-        if self.estat == 'AVANÇAR':
-            # Agafem un con frontal ampli (de -45 a 45 graus) per veure si és un objecte o una paret llarga
-            front_esquerra = msg.ranges[0:45]
-            front_dreta = msg.ranges[315:359]
-            con_frontal = list(front_esquerra) + list(front_dreta)
+        # 3. Creem el missatge CORRECTE (TwistStamped)
+        cmd = TwistStamped()
+        
+        # 4. Omplim la capçalera (OBLIGATORI en Stamped)
+        cmd.header.stamp = self.get_clock().now().to_msg()
+        cmd.header.frame_id = 'base_link'
+
+        # --- ESTAT FINAL (ATURAT) ---
+        if self.estat == 99:
+            cmd.twist.linear.x = 0.0
+            cmd.twist.angular.z = 0.0
+            self.pub.publish(cmd)
+            return
+
+        # --- ESTAT 0: RECTE I LLEGINT LÀSER ---
+        if self.estat == 0:
+            # Slicing de llistes en Python (Pràctica 4.2)
+            dreta = msg.ranges[330:359]
+            esquerra = msg.ranges[0:30]
+            con_frontal = list(dreta) + list(esquerra)
             
-            # Filtrem els raigs que estan a prop (menys de 0.5 metres)
-            raigs_a_prop = [d for d in con_frontal if msg.range_min < d < 0.5]
+            # Filtrar valors invàlids (evitar 0.0 i inf)
+            valors_valids = [d for d in con_frontal if d > msg.range_min and d < msg.range_max]
             
-            if len(raigs_a_prop) > 0: # Hi ha alguna cosa a menys de 0.5m
-                # LÒGICA PER DIFERENCIAR PARET DE CUB
-                # Si hi ha molts raigs bloquejats (> 40), vol dir que l'obstacle és molt ample (Paret)
-                # Si n'hi ha pocs, és un objecte petit (Cub)
-                if len(raigs_a_prop) > 40:
-                    self.get_logger().warn('🧱 Paret detectada! Iniciant corba en S.')
-                    self.canviar_estat('S_GIR_1')
-                else:
-                    self.get_logger().warn('📦 Objecte detectat! Iniciant maniobra d\'esquivament.')
-                    self.canviar_estat('ESQ_GIR_1')
+            if len(valors_valids) > 0:
+                distancia_min = min(valors_valids)
             else:
+                distancia_min = 10.0 # Camí lliure
+                
+            # Decisió segons la distància
+            if distancia_min < 0.5:
+                cmd.twist.linear.x = 0.0 # Frenem
+                
+                # Comprovem quants raigs impacten a prop per diferenciar paret d'objecte
+                raigs_aprop = [d for d in valors_valids if d < 0.5]
+                
+                if len(raigs_aprop) > 40:
+                    self.get_logger().warn('PARET! Iniciant S')
+                    self.estat = 1 # Passem a fer la corba
+                    self.cicles = 0 # Reiniciem el comptador de cicles
+                else:
+                    self.get_logger().warn('OBJECTE! Esquivant')
+                    self.estat = 10 # Passem a rodejar el cub
+                    self.cicles = 0
+            else:
+                # Si no hi ha res, avancem
                 cmd.twist.linear.x = 0.2
                 cmd.twist.angular.z = 0.0
 
-        # ==========================================
-        # 2. MANIOBRA EN "S" (Canvi de Fila)
-        # ==========================================
-        # Gir 90 graus -> Avançar una mica -> Gir 90 graus
-        elif self.estat == 'S_GIR_1':
-            if self.obtenir_temps_estat() < 3.14: # 3.14 segons a 0.5 rad/s = ~90 graus
+        # --- MÀQUINA D'ESTATS: LA MANIOBRA EN "S" ---
+        # Ús del mètode de cicles: si el laser arriba a 10Hz, cada 10 missatges és 1 segon.
+        elif self.estat == 1: 
+            self.cicles += 1
+            if self.cicles < 30: # 3 segons girant a 0.5rad/s = aprox 90 graus
                 cmd.twist.angular.z = 0.5 * self.direccio_s
             else:
-                self.canviar_estat('S_AVANÇAR')
+                self.estat = 2
+                self.cicles = 0
                 
-        elif self.estat == 'S_AVANÇAR':
-            if self.obtenir_temps_estat() < 2.0: # Avançar 2 segons (per fer la fila més ampla)
+        elif self.estat == 2: # Avançar recta (canvi de fila)
+            self.cicles += 1
+            if self.cicles < 20: # 2 segons de canvi de fila
                 cmd.twist.linear.x = 0.15
             else:
-                self.canviar_estat('S_GIR_2')
+                self.estat = 3
+                self.cicles = 0
                 
-        elif self.estat == 'S_GIR_2':
-            if self.obtenir_temps_estat() < 3.14: 
+        elif self.estat == 3: # Segon gir
+            self.cicles += 1
+            if self.cicles < 30:
                 cmd.twist.angular.z = 0.5 * self.direccio_s
             else:
-                # Hem acabat la S. Invertim la direcció per la propera paret i tornem a avançar
-                self.direccio_s *= -1 
-                self.canviar_estat('AVANÇAR')
+                self.direccio_s *= -1 # Invertim costat per la següent S
+                self.estat = 0 # Tornem a mode exploració recta
+                self.cicles = 0
 
-        # ==========================================
-        # 3. MANIOBRA ESQUIVAR OBJECTE (Rodejar a la dreta)
-        # ==========================================
-        # Exemple hardcoded per esquivar: Gira Dreta -> Avança -> Gira Esq -> Avança -> Gira Esq -> Avança -> Gira Dreta
-        elif self.estat == 'ESQ_GIR_1':
-            if self.obtenir_temps_estat() < 3.14: cmd.twist.angular.z = -0.5 # 90º Dreta
-            else: self.canviar_estat('ESQ_AVANÇAR_1')
+        # --- MÀQUINA D'ESTATS: ESQUIVAR OBJECTE ---
+        # Esquivament simple per la dreta
+        elif self.estat == 10: # Gir 90º dreta
+            self.cicles += 1
+            if self.cicles < 30: cmd.twist.angular.z = -0.5
+            else: self.estat = 11; self.cicles = 0
                 
-        elif self.estat == 'ESQ_AVANÇAR_1':
-            if self.obtenir_temps_estat() < 1.5: cmd.twist.linear.x = 0.2
-            else: self.canviar_estat('ESQ_GIR_2')
+        elif self.estat == 11: # Avançar 
+            self.cicles += 1
+            if self.cicles < 25: cmd.twist.linear.x = 0.2
+            else: self.estat = 12; self.cicles = 0
                 
-        elif self.estat == 'ESQ_GIR_2':
-            if self.obtenir_temps_estat() < 3.14: cmd.twist.angular.z = 0.5 # 90º Esquerra
-            else: self.canviar_estat('ESQ_AVANÇAR_2')
-                
-        elif self.estat == 'ESQ_AVANÇAR_2':
-            if self.obtenir_temps_estat() < 2.5: cmd.twist.linear.x = 0.2 # Passem de llarg l'objecte
-            else: self.canviar_estat('ESQ_GIR_3')
-                
-        elif self.estat == 'ESQ_GIR_3':
-            if self.obtenir_temps_estat() < 3.14: cmd.twist.angular.z = 0.5 # 90º Esquerra
-            else: self.canviar_estat('ESQ_AVANÇAR_3')
-                
-        elif self.estat == 'ESQ_AVANÇAR_3':
-            if self.obtenir_temps_estat() < 1.5: cmd.twist.linear.x = 0.2 # Tornem a la línia original
-            else: self.canviar_estat('ESQ_GIR_4')
-                
-        elif self.estat == 'ESQ_GIR_4':
-            if self.obtenir_temps_estat() < 3.14: cmd.twist.angular.z = -0.5 # 90º Dreta (Ens posem rectes de nou)
-            else: self.canviar_estat('AVANÇAR')
+        elif self.estat == 12: # Gir 90º esquerra
+            self.cicles += 1
+            if self.cicles < 30: cmd.twist.angular.z = 0.5
+            else: self.estat = 13; self.cicles = 0
 
-        # Publicar moviment
-        self.pub_cmd.publish(cmd)
+        elif self.estat == 13: # Avançar (superar objecte)
+            self.cicles += 1
+            if self.cicles < 25: cmd.twist.linear.x = 0.2
+            else: self.estat = 14; self.cicles = 0
+
+        elif self.estat == 14: # Gir 90º esquerra
+            self.cicles += 1
+            if self.cicles < 30: cmd.twist.angular.z = 0.5
+            else: self.estat = 15; self.cicles = 0
+
+        elif self.estat == 15: # Avançar per tornar a la ruta
+            self.cicles += 1
+            if self.cicles < 25: cmd.twist.linear.x = 0.2
+            else: self.estat = 16; self.cicles = 0
+
+        elif self.estat == 16: # Gir 90º dreta (ens redrecem a la X)
+            self.cicles += 1
+            if self.cicles < 30: cmd.twist.angular.z = -0.5
+            else: self.estat = 0; self.cicles = 0 # Tornem a començar!
+
+        # 6. Enviem (Usant el mateix nom que a l'init)
+        self.pub.publish(cmd)
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -149,10 +174,12 @@ def main(args=None):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        stop = node.crear_cmd()
-        stop.twist.linear.x = 0.0
+        # Ordre de parada en sortir
+        stop = TwistStamped()
+        stop.header.stamp = node.get_clock().now().to_msg()
+        stop.twist.linear.x = 0.0 
         stop.twist.angular.z = 0.0
-        node.pub_cmd.publish(stop)
+        node.pub.publish(stop)
     finally:
         node.destroy_node()
         rclpy.shutdown()
