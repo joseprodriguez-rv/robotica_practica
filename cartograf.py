@@ -1,0 +1,74 @@
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Int32
+from nav_msgs.msg import Odometry
+import math
+
+class CartografNode(Node):
+    def __init__(self):
+        super().__init__('cartograf')
+
+        self.mapa = []
+        self.comptador_oficial = 0
+
+        self.sub_deteccio = self.create_subscription(
+            Odometry, '/objecte_detectat', self.callback, 10
+        )
+
+        self.pub_cartograf = self.create_publisher(
+            Int32, '/comptador_objectes', 10
+        )
+
+    def callback(self, msg):
+        # 1. Posició (això ja ho tenieu)
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+
+        # 2. Orientació (Quaternions)
+        qx = msg.pose.pose.orientation.x
+        qy = msg.pose.pose.orientation.y
+        qz = msg.pose.pose.orientation.z
+        qw = msg.pose.pose.orientation.w
+
+        # 3. Conversió a Yaw (l'angle de gir sobre el terra en radiants)
+        # Aquesta fórmula és l'estàndard per a la conversió
+        siny_cosp = 2 * (qw * qz + qx * qy)
+        cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
+        yaw_rad = math.atan2(siny_cosp, cosy_cosp)
+
+        # 4. Passar de radiants a graus (més fàcil per a nosaltres)
+        yaw_deg = math.degrees(yaw_rad)
+
+        radi_proximitat = 0.1
+
+        # filtrem deteccions repetides per veure que no guardem la mateixa,
+        # si hi ha soroll, també les hem de filtrar
+        es_repetit = any(
+            math.sqrt((x - obj)**2 + (y - obj)**2) < radi_proximitat # distància < llindar?
+            for obj in self.mapa
+        )
+
+        if not es_repetit:
+            self.mapa.append((x, y, yaw_deg))
+
+            self.comptador_oficial += 1
+            msg_comptador = Int32()
+            msg_comptador.data = self.comptador_oficial
+            self.pub_cartograf.publish(msg_comptador)
+
+            self.get_logger().info(f'Objecte #{self.comptador_oficial} registrat a {x:.2f},{y:.2f} amb Ang {yaw_deg:.1f}°')
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = CartografNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
