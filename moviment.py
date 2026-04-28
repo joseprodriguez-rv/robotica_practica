@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import TwistStamped
 from std_msgs.msg import Int32, String
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
@@ -10,13 +9,6 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 class MovimentNode(Node):
     def __init__(self):
         super().__init__('controlador_moviment')
-
-        # QoS per al sensor
-        qos_sensor = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10
-        )
 
         # QoS per al moviment
         qos_moviment = QoSProfile(
@@ -27,9 +19,9 @@ class MovimentNode(Node):
         )
 
         # Subscripcions
-        self.sub_laser = self.create_subscription(LaserScan, '/scan', self.laser_callback, qos_sensor)
         self.sub_comptador = self.create_subscription(Int32, '/comptador_objectes', self.comptador_callback, 10)
         self.sub_tipus = self.create_subscription(String, '/tipus_obstacle', self.tipus_callback, 10)
+        self.timer = self.create_timer(0.1, self.laser_callback)  # 10Hz, com el laser
         # Publicador
         self.pub = self.create_publisher(TwistStamped, '/cmd_vel', qos_moviment)
         self.get_logger().info('Node de moviment actiu...')
@@ -50,9 +42,7 @@ class MovimentNode(Node):
     def tipus_callback(self, msg):
         self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
-    def laser_callback(self, msg):
-        if len(msg.ranges) == 0:
-            return
+    def laser_callback(self):
 
         cmd = TwistStamped()
         cmd.header.stamp = self.get_clock().now().to_msg()
@@ -65,41 +55,25 @@ class MovimentNode(Node):
             self.pub.publish(cmd)
             return
 
-        #  EXPLORAR EN LÍNIA RECTA 
+        #  EXPLORAR EN LÍNIA RECTA
+        # deteccio.py ja analitza el con i publica el tipus → només l'escoltem
         if self.estat == 0:
-            dreta    = msg.ranges[330:360]
-            esquerra = msg.ranges[0:30]
-            con_frontal = list(dreta) + list(esquerra)
-
-            valors_valids = [d for d in con_frontal
-                             if msg.range_min < d < msg.range_max]
-
-            distancia_min = min(valors_valids) if valors_valids else 10.0
-
-            if distancia_min < 0.5:
-                cmd.twist.linear.x = 0.0
+            if self.tipus_obstacle is None:
+                cmd.twist.linear.x = 0.2   # res detectat, seguim
+                cmd.twist.angular.z = 0.0
+            else:
+                cmd.twist.linear.x = 0.0   # parem mentre decidim
                 cmd.twist.angular.z = 0.0
 
                 if self.tipus_obstacle == 'PARET':
-                    es_paret = True
-                elif self.tipus_obstacle == 'OBJECTE':
-                    es_paret = False
-                else:
-                    return
-                # Reiniciem el tipus
-                self.tipus_obstacle = None
-
-                if es_paret:
                     self.get_logger().warn('PARET detectada → Maniobra en S')
                     self.estat = 1
-                    self.cicles = 0
                 else:
                     self.get_logger().warn('OBJECTE detectat → Esquivant')
                     self.estat = 10
-                    self.cicles = 0
-            else:
-                cmd.twist.linear.x = 0.2
-                cmd.twist.angular.z = 0.0
+
+                self.tipus_obstacle = None  # consumit
+                self.cicles = 0
 
         #  MANIOBRA EN "S"
 
