@@ -10,23 +10,23 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 class DeteccioNode(Node):
     def __init__(self):
         super().__init__('deteccio')
-        
+
         #guardar on està el robot
         self.robot_x = 0.0
         self.robot_y = 0.0
-        self.robot_ang = 0.0 
-        
-        # qos per al sensor 
+        self.robot_ang = 0.0
+
+        # qos per al sensor
         qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT, 
-            history=HistoryPolicy.KEEP_LAST, 
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
             depth=10
         )
-        
+
         #subs al laser
         self.sub_laser = self.create_subscription(
             LaserScan, '/scan', self.laser_callback, qos_profile)
-        
+
         #subs a l'odom (P5)
         self.sub_odom = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10)
@@ -36,14 +36,14 @@ class DeteccioNode(Node):
         self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
 
         self.get_logger().info('Node de Detecció actiu')
-#he tret qos del moviment perquè aquí no moc el robot  
+#he tret qos del moviment perquè aquí no moc el robot
 
     def odom_callback(self, msg):
-        #posició actual 
+        #posició actual
         self.robot_x = msg.pose.pose.position.x
         self.robot_y = msg.pose.pose.position.y
-        
-        #conversió a Yaw 
+
+        #conversió a Yaw
         qx = msg.pose.pose.orientation.x
         qy = msg.pose.pose.orientation.y
         qz = msg.pose.pose.orientation.z
@@ -54,37 +54,37 @@ class DeteccioNode(Node):
 
     def laser_callback(self, msg):
         #con frontal
-        part_esquerra = msg.ranges[0:61]  
-        part_dreta = msg.ranges[300:360]     
+        part_esquerra = msg.ranges[0:61]
+        part_dreta = msg.ranges[300:360]
         con_frontal = list(part_esquerra) + list(part_dreta)
-     
+
         #treure valors invàlids
         distancies_valides = [d for d in con_frontal if msg.range_min < d < msg.range_max]
-        
+
         if len(distancies_valides) > 0:
             distancia_min = min(distancies_valides)
-            
-            #si detectem un obstacle a prop 
+
+            #si detectem un obstacle a prop
             if distancia_min < 0.5:
                 #si és mur o objecte
                 tipus = String()
-                if len(distancies_valides) > 90: 
+                if len(distancies_valides) > 90:
                     tipus.data = 'PARET'
                     self.get_logger().info('PARET detectada')
-                else: 
+                else:
                     #buscar l'angle
                     tipus.data = 'OBJECTE'
                     num_min = msg.ranges.index(distancia_min) #per trobar l'angle on està l'objecte
-                    angle = msg.angle_min + (num_min * msg.angle_increment) 
+                    angle = msg.angle_min + (num_min * msg.angle_increment)
                     #ros2 topic echo /scan --once per comprobar si això existeix
                     self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
                     self.enviar_posicio_objecte(distancia_min, angle)
-                self.pub_tipus.publisher(tipus)
+                self.pub_tipus.publish(tipus)
 
     def enviar_posicio_objecte(self, r, a):
         #suma d'angle del robot + angle del laser
         angle_final = self.robot_ang + a
-        
+
         obj_x = self.robot_x + (r * math.cos(angle_final))
         obj_y = self.robot_y + (r * math.sin(angle_final))
 
@@ -93,14 +93,14 @@ class DeteccioNode(Node):
         msg_obj.header.frame_id = 'map'
         msg_obj.pose.pose.position.x = float(obj_x)
         msg_obj.pose.pose.position.y = float(obj_y)
-        
+
         self.pub_objecte.publish(msg_obj)
         self.get_logger().info(f'Objecte detectat a: X={obj_x:.2f}, Y={obj_y:.2f}')
 
-def main(args=None): 
+def main(args=None):
     rclpy.init(args=args)
     node = DeteccioNode()
-    
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
