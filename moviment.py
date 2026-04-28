@@ -21,7 +21,7 @@ class MovimentNode(Node):
         # Subscripcions
         self.sub_comptador = self.create_subscription(Int32, '/comptador_objectes', self.comptador_callback, 10)
         self.sub_tipus = self.create_subscription(String, '/tipus_obstacle', self.tipus_callback, 10)
-        self.timer = self.create_timer(0.1, self.laser_callback)  # 10Hz, com el laser
+        self.timer = self.create_timer(0.1, self.control_callback)
         # Publicador
         self.pub = self.create_publisher(TwistStamped, '/cmd_vel', qos_moviment)
         self.get_logger().info('Node de moviment actiu...')
@@ -39,6 +39,7 @@ class MovimentNode(Node):
         if self.objectes >= 5:
             self.estat = None
             self.get_logger().info('Objectiu complert: 5 objectes trobats!')
+            
     def tipus_callback(self, msg):
         self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
@@ -130,7 +131,7 @@ class MovimentNode(Node):
 
         elif self.estat == 13:  # Avançar (superar objecte)
             self.cicles += 1
-            if self.cicles < 25:
+            if self.cicles < 50:
                 cmd.twist.linear.x = 0.2
             else:
                 self.estat = 14
