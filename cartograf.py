@@ -44,7 +44,7 @@ class CartografNode(Node):
         # filtrem deteccions repetides per veure que no guardem la mateixa,
         # si hi ha soroll, també les hem de filtrar
         es_repetit = any(
-            math.sqrt((x - obj)**2 + (y - obj)**2) < radi_proximitat # distància < llindar?
+            math.sqrt((x - obj[0])**2 + (y - obj[1])**2) < radi_proximitat # distància < llindar?
             for obj in self.mapa
         )
 
