@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
+from std_msgs.msg import String
 import math
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
@@ -32,6 +33,7 @@ class DeteccioNode(Node):
 
         #publisher objecte en odometria amb x i y
         self.pub_objecte = self.create_publisher(Odometry, '/objecte_detectat', 10)
+        self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
 
         self.get_logger().info('Node de Detecció actiu')
 #he tret qos del moviment perquè aquí no moc el robot  
@@ -65,17 +67,19 @@ class DeteccioNode(Node):
             #si detectem un obstacle a prop 
             if distancia_min < 0.5:
                 #si és mur o objecte
+                tipus = String()
                 if len(distancies_valides) > 90: 
+                    tipus.data = 'PARET'
                     self.get_logger().info('PARET detectada')
                 else: 
                     #buscar l'angle
+                    tipus.data = 'OBJECTE'
                     num_min = msg.ranges.index(distancia_min) #per trobar l'angle on està l'objecte
                     angle = msg.angle_min + (num_min * msg.angle_increment) 
                     #ros2 topic echo /scan --once per comprobar si això existeix
                     self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
                     self.enviar_posicio_objecte(distancia_min, angle)
-        else: 
-            distancia_min = 10.0
+                self.pub_tipus.publisher(tipus)
 
     def enviar_posicio_objecte(self, r, a):
         #suma d'angle del robot + angle del laser
