@@ -42,7 +42,7 @@ class MovimentNode(Node):
     def tipus_callback(self, msg):
         self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
-    def laser_callback(self):
+    def control_callback(self):
 
         cmd = TwistStamped()
         cmd.header.stamp = self.get_clock().now().to_msg()
