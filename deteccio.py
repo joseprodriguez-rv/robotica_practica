@@ -87,8 +87,8 @@ class DeteccioNode(Node):
         msg_obj = Odometry()
         msg_obj.header.stamp = self.get_clock().now().to_msg()
         msg_obj.header.frame_id = 'map'
-        msg_obj.x = float(obj_x)
-        msg_obj.y = float(obj_y)
+        msg_obj.pose.pose.position.x = float(obj_x)
+        msg_obj.pose.pose.position.y = float(obj_y)
         
         self.pub_objecte.publish(msg_obj)
         self.get_logger().info(f'Objecte detectat a: X={obj_x:.2f}, Y={obj_y:.2f}')
