@@ -24,7 +24,7 @@ class CartografNode(Node):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
 
-        radi_proximitat = 0.5
+        radi_proximitat = 0.2
 
         # filtrem deteccions repetides per veure que no guardem la mateixa,
         # si hi ha soroll, també les hem de filtrar
