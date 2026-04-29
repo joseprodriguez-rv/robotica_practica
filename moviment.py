@@ -30,6 +30,7 @@ class MovimentNode(Node):
         self.sub_comptador = self.create_subscription(Int32, '/comptador_objectes', self.comptador_callback, 10)
         self.sub_tipus = self.create_subscription(String, '/tipus_obstacle', self.tipus_callback, 10)
         self.timer = self.create_timer(0.1, self.control_callback)
+
         # Publicador
         self.pub = self.create_publisher(TwistStamped, '/cmd_vel', qos_moviment)
         self.pub_maniobra = self.create_publisher(Bool, '/en_maniobra', 10)  # flag per a deteccio
@@ -54,22 +55,21 @@ class MovimentNode(Node):
         if self.objectes >= 5:
             self.estat = None
             self.get_logger().info('Objectiu complert: 5 objectes trobats!')
-            
+
     def tipus_callback(self, msg):
         self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
     def control_callback(self):
-
         cmd = TwistStamped()
         cmd.header.stamp = self.get_clock().now().to_msg()
         cmd.header.frame_id = 'base_link'
 
         # Publicar flag en_maniobra perquè deteccio sàpiga si pot publicar
         flag = Bool()
-        flag.data = self.estat not in (0, None)
+        flag.data = self.estat in (1, 2, 3)  # només durant maniobra en S
         self.pub_maniobra.publish(flag)
 
-        #  ESTAT FINAL 
+        #  ESTAT FINAL
         if self.estat is None:
             cmd.twist.linear.x = 0.0
             cmd.twist.angular.z = 0.0
@@ -86,8 +86,6 @@ class MovimentNode(Node):
                 cmd.twist.angular.z = 0.0
 
                 # Decidir cap a quin costat esquivar segons espai lliure al làser
-                # Esquerra = índexs 60-120, Dreta = índexs 240-300 (làser 360°)
-
                 if self.tipus_obstacle == 'PARET':
                     self.get_logger().warn('PARET detectada → Maniobra en S')
                     self.estat = 1
@@ -96,16 +94,16 @@ class MovimentNode(Node):
                     self.estat = 10
 
                     if len(self.laser_ranges) >= 360:
-                        dreta = self.laser_ranges[330:359]
+                        dreta = self.laser_ranges[300:360]
                         esquerra = self.laser_ranges[0:60]
-                        valors_validsdre = [d for d in dreta if d > 0.1 and d < 6]
-                        valors_validsesq = [d for d in esquerra if d > 0.1 and d < 6]
+                        valors_validsdre = [d for d in dreta if 0.1 < d < 6]
+                        valors_validsesq = [d for d in esquerra if 0.1 < d < 6]
                         num_dre = len(valors_validsdre)
                         num_esq = len(valors_validsesq)
                         if num_esq > num_dre:
-                             self.direccio_esquivar = 1
-                        else:
                             self.direccio_esquivar = -1
+                        else:
+                            self.direccio_esquivar = 1
                         self.get_logger().info(
                             f'Obstacle detectat → Espai lliure: ESQ={num_esq} rays, DRE={num_dre} rays → Gir {"ESQUERRA" if self.direccio_esquivar == 1 else "DRETA"}'
                         )
@@ -114,7 +112,6 @@ class MovimentNode(Node):
                 self.cicles = 0
 
         #  MANIOBRA EN "S"
-
         elif self.estat == 1:   # Primer gir (~90°)
             self.cicles += 1
             if self.cicles < 30:
@@ -139,9 +136,9 @@ class MovimentNode(Node):
                 self.direccio_s *= -1   # Invertim per la propera S
                 self.estat = 0
                 self.cicles = 0
+                self.tipus_obstacle = None  # reset per no processar obstacle vell
 
         #  ESQUIVAR OBJECTE (costat decidit pel làser)
-
         elif self.estat == 10:  # Gir 90° cap al costat lliure
             self.cicles += 1
             if self.cicles < 30:
@@ -152,7 +149,7 @@ class MovimentNode(Node):
 
         elif self.estat == 11:  # Avançar (esquivar lateral)
             self.cicles += 1
-            if self.cicles < 25:
+            if self.cicles < 12:
                 cmd.twist.linear.x = 0.2
             else:
                 self.estat = 12
@@ -168,7 +165,7 @@ class MovimentNode(Node):
 
         elif self.estat == 13:  # Avançar (superar objecte)
             self.cicles += 1
-            if self.cicles < 50:
+            if self.cicles < 25:
                 cmd.twist.linear.x = 0.2
             else:
                 self.estat = 14
@@ -184,7 +181,7 @@ class MovimentNode(Node):
 
         elif self.estat == 15:  # Avançar per tornar a la ruta
             self.cicles += 1
-            if self.cicles < 25:
+            if self.cicles < 12:
                 cmd.twist.linear.x = 0.2
             else:
                 self.estat = 16
@@ -197,6 +194,7 @@ class MovimentNode(Node):
             else:
                 self.estat = 0
                 self.cicles = 0
+                self.tipus_obstacle = None  # reset per no processar obstacle vell
 
         self.pub.publish(cmd)
 
