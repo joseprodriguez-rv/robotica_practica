@@ -27,11 +27,14 @@ class DeteccioNode(Node):
         self.sub_laser = self.create_subscription(
             LaserScan, '/scan', self.laser_callback, qos_profile)
 
-        #subs a l'odom (P5)
+        #subs a l'odom
         self.sub_odom = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10)
 
-#he tret la subs a maniobra
+        #subscripció a maniobra — pausar detecció durant avanços laterals
+        self.en_maniobra = False
+        self.sub_maniobra = self.create_subscription(
+            Bool, '/en_maniobra', self.maniobra_callback, 10)
 
         #subscripció al comptador d'objectes
         self.objectes = 0
@@ -43,7 +46,6 @@ class DeteccioNode(Node):
         self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
 
         self.get_logger().info('Node de Detecció actiu')
-#he tret qos del moviment perquè aquí no moc el robot
 
     def odom_callback(self, msg):
         #posició actual
@@ -59,19 +61,20 @@ class DeteccioNode(Node):
         cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
         self.robot_ang = math.atan2(siny_cosp, cosy_cosp)
 
- #he tret la funció maniobra callback
+    def maniobra_callback(self, msg):
+        self.en_maniobra = msg.data
 
     def comptador_callback(self, msg):
         self.objectes = msg.data
 
     def laser_callback(self, msg):
-        # si està en maniobra, sí que ha de detectar per poder-se aturar
-        if self.objectes >= 5:
+        # pausar durant avanços laterals de l'esquiva (estats 11, 13, 15)
+        if self.en_maniobra or self.objectes >= 5:
             return
 
         #con frontal
-        part_esquerra = msg.ranges[0:100]
-        part_dreta = msg.ranges[260:360]
+        part_esquerra = msg.ranges[0:61]
+        part_dreta = msg.ranges[300:360]
         con_frontal = list(part_esquerra) + list(part_dreta)
 
         #treure valors invàlids
@@ -81,18 +84,17 @@ class DeteccioNode(Node):
             distancia_min = min(distancies_valides)
 
             #si detectem un obstacle a prop
-            if distancia_min < 0.25:
-                #si és mur o objecte
+            if distancia_min < 0.4:
                 tipus = String()
-                if len(distancies_valides) > 90:
+                # paret: més de 30 punts al con frontal
+                # objecte petit (ampolla, estoig, cilindre): menys de 30 punts
+                if len(distancies_valides) > 30:
                     tipus.data = 'PARET'
                     self.get_logger().info('PARET detectada')
                 else:
-                    #buscar l'angle
                     tipus.data = 'OBJECTE'
                     num_min = msg.ranges.index(distancia_min) #per trobar l'angle on està l'objecte
                     angle = msg.angle_min + (num_min * msg.angle_increment)
-                    #ros2 topic echo /scan --once per comprobar si això existeix
                     self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
                     self.enviar_posicio_objecte(distancia_min, angle)
                 self.pub_tipus.publish(tipus)
@@ -126,6 +128,5 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
 
 #es llegeix la posició amb msg.pose.pose.position.x

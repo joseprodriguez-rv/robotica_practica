@@ -20,16 +20,16 @@ class CartografNode(Node):
         )
 
     def callback(self, msg):
-        # 1. Posició (això ja ho tenieu)
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
 
-        radi_proximitat = 0.2
+        # 0.35m — suficient per absorbir soroll d'odometria
+        # però prou petit per distingir objectes propers (ampolles, estoigs)
+        radi_proximitat = 0.35
 
-        # filtrem deteccions repetides per veure que no guardem la mateixa,
-        # si hi ha soroll, també les hem de filtrar
+        # filtrem deteccions repetides
         es_repetit = any(
-            math.sqrt((x - obj[0])**2 + (y - obj[1])**2) < radi_proximitat # distància < llindar?
+            math.sqrt((x - obj[0])**2 + (y - obj[1])**2) < radi_proximitat
             for obj in self.mapa
         )
 
