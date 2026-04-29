@@ -41,7 +41,7 @@ class CartografNode(Node):
             msg_comptador.data = self.comptador_oficial
             self.pub_cartograf.publish(msg_comptador)
 
-            self.get_logger().info(f'Objecte #{self.comptador_oficial} registrat a X={x:.2f}, Y={y:.2f})
+            self.get_logger().info(f'Objecte #{self.comptador_oficial} registrat a X={x:.2f}, Y={y:.2f}')
 
 def main(args=None):
     rclpy.init(args=args)
