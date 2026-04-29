@@ -70,8 +70,8 @@ class DeteccioNode(Node):
             return
 
         #con frontal
-        part_esquerra = msg.ranges[0:61]
-        part_dreta = msg.ranges[300:360]
+        part_esquerra = msg.ranges[0:100]
+        part_dreta = msg.ranges[260:360]
         con_frontal = list(part_esquerra) + list(part_dreta)
 
         #treure valors invàlids
