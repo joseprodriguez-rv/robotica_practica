@@ -88,8 +88,8 @@ class MovimentNode(Node):
     def calcular_costat_lliure(self):
         """Decideix cap a quin costat hi ha més espai lliure"""
         if len(self.laser_ranges) >= 360:
-            dreta = self.laser_ranges[300:360]
-            esquerra = self.laser_ranges[0:60]
+            dreta = self.laser_ranges[270:360]
+            esquerra = self.laser_ranges[0:90]
             valors_validsdre = [d for d in dreta if 0.1 < d < 6]
             valors_validsesq = [d for d in esquerra if 0.1 < d < 6]
             num_dre = len(valors_validsdre)
