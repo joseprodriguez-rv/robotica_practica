@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from std_msgs.msg import String
+from std_msgs.msg import String, Bool
 import math
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
@@ -31,6 +31,11 @@ class DeteccioNode(Node):
         self.sub_odom = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10)
 
+        #subscripció a maniobra
+        self.en_maniobra = False
+        self.sub_maniobra = self.create_subscription(
+            Bool, '/en_maniobra', self.maniobra_callback, 10)
+
         #publisher objecte en odometria amb x i y
         self.pub_objecte = self.create_publisher(Odometry, '/objecte_detectat', 10)
         self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
@@ -52,7 +57,14 @@ class DeteccioNode(Node):
         cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
         self.robot_ang = math.atan2(siny_cosp, cosy_cosp)
 
+    def maniobra_callback(self, msg):
+        self.en_maniobra = msg.data
+
     def laser_callback(self, msg):
+        # si està en maniobra, no detectar res
+        if self.en_maniobra:
+            return
+
         #con frontal
         part_esquerra = msg.ranges[0:61]
         part_dreta = msg.ranges[300:360]
