@@ -163,6 +163,8 @@ graph TD
 
 ## Canvis respecte a la versió original
 
+Molts comentaris han sigut netejats.
+
 ### `deteccio.py`
 
 - **Distància de detecció** augmentada de `0.25m` a `0.4m` - detecta obstacles abans

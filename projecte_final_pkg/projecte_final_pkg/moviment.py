@@ -57,7 +57,6 @@ class MovimentNode(Node):
         self.laser_ranges = msg.ranges  # guardem per usar al control_callback
 
     def odom_callback(self, msg):
-        # Convertir quaternion → yaw
         q = msg.pose.pose.orientation
         siny = 2.0 * (q.w * q.z + q.x * q.y)
         cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
@@ -88,8 +87,8 @@ class MovimentNode(Node):
     def calcular_costat_lliure(self):
         """Decideix cap a quin costat hi ha més espai lliure"""
         if len(self.laser_ranges) >= 360:
-            dreta = self.laser_ranges[270:360]
-            esquerra = self.laser_ranges[0:90]
+            dreta = self.laser_ranges[300:360]
+            esquerra = self.laser_ranges[0:60]
             valors_validsdre = [d for d in dreta if 0.1 < d < 6]
             valors_validsesq = [d for d in esquerra if 0.1 < d < 6]
             num_dre = len(valors_validsdre)
@@ -144,7 +143,7 @@ class MovimentNode(Node):
                 self.tipus_obstacle = None
                 self.cicles = 0
 
-        #  MANIOBRA PARET — gir de 45° cap al costat lliure
+        #  MANIOBRA PARET - gir de 45° cap al costat lliure
         elif self.estat == 1:
             if self.angle_girat() < math.pi / 4:  # 45°
                 cmd.twist.angular.z = 0.5 * self.direccio_paret
@@ -161,7 +160,7 @@ class MovimentNode(Node):
                 self.estat = 11
                 self.cicles = 0
 
-        elif self.estat == 11:  # Avançar (esquivar lateral) — deteccio pausada
+        elif self.estat == 11:  # Avançar (esquivar lateral) - deteccio pausada
             self.cicles += 1
             if self.cicles < 12:
                 cmd.twist.linear.x = 0.2
@@ -177,7 +176,7 @@ class MovimentNode(Node):
                 self.estat = 13
                 self.cicles = 0
 
-        elif self.estat == 13:  # Avançar (superar objecte) — deteccio pausada
+        elif self.estat == 13:  # Avançar (superar objecte) - deteccio pausada
             self.cicles += 1
             if self.cicles < 25:
                 cmd.twist.linear.x = 0.2
@@ -193,7 +192,7 @@ class MovimentNode(Node):
                 self.estat = 15
                 self.cicles = 0
 
-        elif self.estat == 15:  # Avançar per tornar a la ruta — deteccio pausada
+        elif self.estat == 15:  # Avançar per tornar a la ruta - deteccio pausada
             self.cicles += 1
             if self.cicles < 12:
                 cmd.twist.linear.x = 0.2
