@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String, Bool, Int32
 import math
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
@@ -65,6 +65,9 @@ class DeteccioNode(Node):
     def maniobra_callback(self, msg):
         self.en_maniobra = msg.data
 
+    def comptador_callback(self, msg):
+        self.objectes = msg.data
+
     def laser_callback(self, msg):
         # si està en maniobra, no detectar res
         if self.en_maniobra or self.objectes >= 5:
@@ -82,7 +85,7 @@ class DeteccioNode(Node):
             distancia_min = min(distancies_valides)
 
             #si detectem un obstacle a prop
-            if distancia_min < 0.5:
+            if distancia_min < 0.25:
                 #si és mur o objecte
                 tipus = String()
                 if len(distancies_valides) > 90:
