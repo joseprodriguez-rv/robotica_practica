@@ -24,22 +24,7 @@ class CartografNode(Node):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
 
-        # 2. Orientació (Quaternions)
-        qx = msg.pose.pose.orientation.x
-        qy = msg.pose.pose.orientation.y
-        qz = msg.pose.pose.orientation.z
-        qw = msg.pose.pose.orientation.w
-
-        # 3. Conversió a Yaw (l'angle de gir sobre el terra en radiants)
-        # Aquesta fórmula és l'estàndard per a la conversió
-        siny_cosp = 2 * (qw * qz + qx * qy)
-        cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
-        yaw_rad = math.atan2(siny_cosp, cosy_cosp)
-
-        # 4. Passar de radiants a graus (més fàcil per a nosaltres)
-        yaw_deg = math.degrees(yaw_rad)
-
-        radi_proximitat = 0.1
+        radi_proximitat = 0.5
 
         # filtrem deteccions repetides per veure que no guardem la mateixa,
         # si hi ha soroll, també les hem de filtrar
@@ -49,14 +34,14 @@ class CartografNode(Node):
         )
 
         if not es_repetit:
-            self.mapa.append((x, y, yaw_deg))
+            self.mapa.append((x, y))
 
             self.comptador_oficial += 1
             msg_comptador = Int32()
             msg_comptador.data = self.comptador_oficial
             self.pub_cartograf.publish(msg_comptador)
 
-            self.get_logger().info(f'Objecte #{self.comptador_oficial} registrat a {x:.2f},{y:.2f} amb Ang {yaw_deg:.1f}°')
+            self.get_logger().info(f'Objecte #{self.comptador_oficial} registrat a X={x:.2f}, Y={y:.2f})
 
 def main(args=None):
     rclpy.init(args=args)

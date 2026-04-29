@@ -36,6 +36,11 @@ class DeteccioNode(Node):
         self.sub_maniobra = self.create_subscription(
             Bool, '/en_maniobra', self.maniobra_callback, 10)
 
+        #subscripció al comptador d'objectes
+        self.objectes = 0
+        self.sub_comptador = self.create_subscription(
+            Int32, '/comptador_objectes', self.comptador_callback, 10)
+
         #publisher objecte en odometria amb x i y
         self.pub_objecte = self.create_publisher(Odometry, '/objecte_detectat', 10)
         self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
@@ -62,7 +67,7 @@ class DeteccioNode(Node):
 
     def laser_callback(self, msg):
         # si està en maniobra, no detectar res
-        if self.en_maniobra:
+        if self.en_maniobra or self.objectes >= 5:
             return
 
         #con frontal
@@ -107,7 +112,6 @@ class DeteccioNode(Node):
         msg_obj.pose.pose.position.y = float(obj_y)
 
         self.pub_objecte.publish(msg_obj)
-        self.get_logger().info(f'Objecte detectat a: X={obj_x:.2f}, Y={obj_y:.2f}')
 
 def main(args=None):
     rclpy.init(args=args)
