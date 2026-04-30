@@ -86,8 +86,8 @@ class DeteccioNode(Node):
             #si detectem un obstacle a prop
             if distancia_min < 0.4:
                 tipus = String()
-                # paret: més de 30 punts al con frontal
-                # objecte petit (ampolla, estoig, cilindre): menys de 30 punts
+                # paret: més de 90 punts al con frontal
+                # objecte petit (ampolla, estoig, cilindre): menys de 90 punts
                 if len(distancies_valides) > 90:
                     tipus.data = 'PARET'
                     self.get_logger().info('PARET detectada')
