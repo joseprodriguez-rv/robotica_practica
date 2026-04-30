@@ -5,6 +5,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import TwistStamped
 from std_msgs.msg import Int32, String, Bool
 from sensor_msgs.msg import LaserScan
+from nav_msgs.msg import Odometry
+import math 
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 #paràmetres per poder-los ajustar
@@ -42,6 +44,7 @@ class MovimentNode(Node):
         self.sub_comptador = self.create_subscription(Int32, '/comptador_objectes', self.comptador_callback, 10)
         self.sub_tipus = self.create_subscription(String, '/tipus_obstacle', self.tipus_callback, 10)
         self.timer = self.create_timer(0.1, self.control_callback)
+        self.sub_odom      = self.create_subscription(Odometry,  '/odom',               self.odom_callback,      10)
 
         # Publicador
         self.pub = self.create_publisher(TwistStamped, '/cmd_vel', qos_moviment)
@@ -92,6 +95,67 @@ class MovimentNode(Node):
             return
         #durant avançaments i recta fer deteccions
         self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
+    #per l'odometria
+    def iniciar_gir(self):
+        self.angle_inici_gir = self.angle_actual
+ 
+    def angle_girat(self):
+        if self.angle_inici_gir is None:
+            return 0.0
+        diff = self.angle_actual - self.angle_inici_gir
+        diff = (diff + math.pi) % (2 * math.pi) - math.pi
+        return abs(diff)
+ 
+    def iniciar_avanc(self):
+        self.pos_x_inici = self.pos_x
+        self.pos_y_inici = self.pos_y
+ 
+    def distancia_avancada(self):
+        dx = self.pos_x - self.pos_x_inici
+        dy = self.pos_y - self.pos_y_inici
+        return math.sqrt(dx * dx + dy * dy)
+        
+    def calcular_costat_lliure(self): #per trobar +1 (esq) o -1 (dreta)
+        if len(self.laser_ranges) < 360:
+            return 1
+ 
+        esquerra = self.laser_ranges[60:120]
+        dreta = self.laser_ranges[240:300]
+ 
+        num_esq = len([d for d in esquerra if 0.1 < d < 6])
+        num_dre = len([d for d in dreta     if 0.1 < d < 6])
+ 
+        self.get_logger().info(f'Punts esq: {num_esq} | Punts dre: {num_dre}')
+ 
+        if num_esq >= num_dre:
+            self.get_logger().info('-> ESQUERRA (+1)')
+            return 1
+        else:
+            self.get_logger().info('-> DRETA (-1)')
+            return -1
+   
+    def comprovar_obstacle_pendent(self, estat_seguent):
+        if self.tipus_obstacle == 'PARET':
+            self.get_logger().warn('PARET -> Girant 135°')
+            self.direccio_paret = self.calcular_costat_lliure()
+            self.tipus_obstacle = None
+            self.estat = 1
+            self.iniciar_gir()
+ 
+        elif self.tipus_obstacle == 'OBJECTE':
+            self.get_logger().warn('OBJECTE -> Esquivant')
+            self.direccio_esquivar = self.calcular_costat_lliure()
+            self.tipus_obstacle = None
+            self.estat = 10
+            self.iniciar_gir()
+ 
+        else:
+            self.tipus_obstacle = None
+            self.estat = estat_seguent
+            if estat_seguent in estat_gir:
+                self.iniciar_gir()
+            elif estat_seguent in estat_avanç:
+                self.iniciar_avanc()
 
     def control_callback(self):
         cmd = TwistStamped()
@@ -118,7 +182,7 @@ class MovimentNode(Node):
             else:
                 cmd.twist.linear.x = 0.0
                 cmd.twist.angular.z = 0.0
-                self.comprovar_obstacles(0)
+                self.comprovar_obstacle_pendent(0)
         #estat 1 (gir 135 per paret)
         elif self.estat == 1:
             if self.angle_girat()<ang_paret-marge_angle:
@@ -127,9 +191,9 @@ class MovimentNode(Node):
                 self.get_logger().info('Gir paret acabat')
                 self.comprovar_obstacle_pendent(0)
 
-elif self.estat == 10:
-            if self.angle_girat() < ANG_ESQUIVA - MARGE_ANGLE:
-                cmd.twist.angular.z = VEL_ANGULAR * self.direccio_esquivar
+        elif self.estat == 10:
+            if self.angle_girat() < ang_esq - marge_angle:
+                cmd.twist.angular.z = w * self.direccio_esquivar
             else:
                 self.get_logger().info('Estat 10 acabat')
                 self.comprovar_obstacle_pendent(11)
@@ -140,15 +204,15 @@ elif self.estat == 10:
                 cmd.twist.linear.x = 0.0
                 self.get_logger().warn('Obstacle durant estat 11 -> gestionant')
                 self.comprovar_obstacle_pendent(11)
-            elif self.distancia_avancada() < DIST_ESQUIVA:
-                cmd.twist.linear.x = VEL_LINEAL
+            elif self.distancia_avancada() < dist_esq:
+                cmd.twist.linear.x =vel
             else:
                 self.get_logger().info('Estat 11 acabat')
                 self.comprovar_obstacle_pendent(12)
  
         elif self.estat == 12:
-            if self.angle_girat() < ANG_ESQUIVA - MARGE_ANGLE:
-                cmd.twist.angular.z = -VEL_ANGULAR * self.direccio_esquivar
+            if self.angle_girat() < ang_esq - marge_angle:
+                cmd.twist.angular.z = -w * self.direccio_esquivar
             else:
                 self.get_logger().info('Estat 12 acabat')
                 self.comprovar_obstacle_pendent(13)
@@ -159,15 +223,15 @@ elif self.estat == 10:
                 cmd.twist.linear.x = 0.0
                 self.get_logger().warn('Obstacle durant estat 13 -> gestionant')
                 self.comprovar_obstacle_pendent(13)
-            elif self.distancia_avancada() < DIST_SUPERAR:
-                cmd.twist.linear.x = VEL_LINEAL
+            elif self.distancia_avancada() < dist_superar:
+                cmd.twist.linear.x = vel
             else:
                 self.get_logger().info('Estat 13 acabat')
                 self.comprovar_obstacle_pendent(14)
  
         elif self.estat == 14:
-            if self.angle_girat() < ANG_ESQUIVA - MARGE_ANGLE:
-                cmd.twist.angular.z = -VEL_ANGULAR * self.direccio_esquivar
+            if self.angle_girat() < ang_esq - marge_angle:
+                cmd.twist.angular.z = -w * self.direccio_esquivar
             else:
                 self.get_logger().info('Estat 14 acabat')
                 self.comprovar_obstacle_pendent(15)
@@ -178,14 +242,14 @@ elif self.estat == 10:
                 cmd.twist.linear.x = 0.0
                 self.get_logger().warn('Obstacle durant estat 15 -> gestionant')
                 self.comprovar_obstacle_pendent(15)
-            elif self.distancia_avancada() < DIST_ESQUIVA:
-                cmd.twist.linear.x = VEL_LINEAL
+            elif self.distancia_avancada() < dist_esq:
+                cmd.twist.linear.x = vel
             else:
                 self.get_logger().info('Estat 15 acabat')
                 self.comprovar_obstacle_pendent(16)
  
         elif self.estat == 16:
-            if self.angle_girat() < ang - MARGE_ANGLE:
+            if self.angle_girat() < ang_esq - marge_angle:
                 cmd.twist.angular.z = w * self.direccio_esquivar
             else:
                 self.get_logger().info('Estat 16 acabat -> tornant a estat 0')
