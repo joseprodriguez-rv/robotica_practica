@@ -70,7 +70,7 @@ class DeteccioNode(Node):
 
     def laser_callback(self, msg):
         # si està en maniobra, no detectar res
-        if self.en_maniobra or self.objectes >= 5:
+        if self.objectes >= 5:
             return
 
         #con frontal
@@ -83,9 +83,9 @@ class DeteccioNode(Node):
 
         if len(distancies_valides) > 0:
             distancia_min = min(distancies_valides)
-
+            llindar = 0.15 if self.en_maniobra else 0.25
             #si detectem un obstacle a prop
-            if distancia_min < 0.25:
+            if distancia_min < llindar:
                 #si és mur o objecte
                 tipus = String()
                 if len(distancies_valides) > 90:
