@@ -86,11 +86,13 @@ class DeteccioNode(Node):
             #si detectem un obstacle a prop
             if distancia_min < 0.4:
                 tipus = String()
-                # paret: més de 90 punts al con frontal
-                # objecte petit (ampolla, estoig, cilindre): menys de 90 punts
-                if len(distancies_valides) > 90:
+                marge = 0.10
+                propers = [d for d in distancies_valides if d < distancia_min + marge]
+                if len(propers)>60:
                     tipus.data = 'PARET'
                     self.get_logger().info('PARET detectada')
+                # paret: més de 60 punts al con frontal
+                # objecte petit (ampolla, estoig, cilindre): menys de 60 punts
                 else:
                     tipus.data = 'OBJECTE'
                     num_min = msg.ranges.index(distancia_min) #per trobar l'angle on està l'objecte
