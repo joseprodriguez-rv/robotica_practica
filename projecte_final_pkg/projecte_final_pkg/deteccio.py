@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from std_msgs.msg import String, Bool, Int32
+from std_msgs.msg import String, Int32
 import math
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
@@ -31,10 +31,10 @@ class DeteccioNode(Node):
         self.sub_odom = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10)
 
-        #subscripció a maniobra — pausar detecció durant avanços laterals
-        self.en_maniobra = False
+        #subscripció a maniobra — 0=explorant, 1=girant (OFF), 2=esquiva activa (llindar reduït)
+        self.en_maniobra = 0
         self.sub_maniobra = self.create_subscription(
-            Bool, '/en_maniobra', self.maniobra_callback, 10)
+            Int32, '/en_maniobra', self.maniobra_callback, 10)
 
         #subscripció al comptador d'objectes
         self.objectes = 0
@@ -68,8 +68,8 @@ class DeteccioNode(Node):
         self.objectes = msg.data
 
     def laser_callback(self, msg):
-        # pausar durant avanços laterals de l'esquiva (estats 11, 13, 15)
-        if self.en_maniobra or self.objectes >= 5:
+        # durant girs (en_maniobra==1) detecció completament desactivada
+        if self.en_maniobra == 1 or self.objectes >= 5:
             return
 
         #con frontal
@@ -82,7 +82,7 @@ class DeteccioNode(Node):
 
         if len(distancies_valides) > 0:
             distancia_min = min(distancies_valides)
-            llindar = 0.1 if self.en_maniobra else 0.25
+            llindar = 0.15 if self.en_maniobra == 2 else 0.25
 
             #si detectem un obstacle a prop
             if distancia_min < llindar:
