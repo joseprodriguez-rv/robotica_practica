@@ -57,6 +57,7 @@ class MovimentNode(Node):
         self.laser_ranges = msg.ranges  # guardem per usar al control_callback
 
     def odom_callback(self, msg):
+        # Convertir quaternion -> yaw
         q = msg.pose.pose.orientation
         siny = 2.0 * (q.w * q.z + q.x * q.y)
         cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
@@ -85,10 +86,10 @@ class MovimentNode(Node):
         return abs(diff)
 
     def calcular_costat_lliure(self):
-        """Decideix cap a quin costat hi ha més espai lliure"""
+        """Decideix cap a quin costat hi ha més espai lliure - 180° frontals"""
         if len(self.laser_ranges) >= 360:
-            dreta = self.laser_ranges[300:360]
-            esquerra = self.laser_ranges[0:60]
+            dreta = self.laser_ranges[270:360]
+            esquerra = self.laser_ranges[0:90]
             valors_validsdre = [d for d in dreta if 0.1 < d < 6]
             valors_validsesq = [d for d in esquerra if 0.1 < d < 6]
             num_dre = len(valors_validsdre)
@@ -99,15 +100,34 @@ class MovimentNode(Node):
                 return 1   # més espai a la dreta
         return 1  # per defecte
 
+    def comprovar_obstacle_pendent(self, estat_seguent):
+        """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
+        if self.tipus_obstacle == 'PARET':
+            self.get_logger().warn('PARET detectada -> Girant 45° cap al costat lliure')
+            self.direccio_paret = self.calcular_costat_lliure()
+            self.tipus_obstacle = None
+            self.estat = 1
+            self.iniciar_gir()
+        elif self.tipus_obstacle == 'OBJECTE':
+            self.get_logger().warn('OBJECTE detectat -> Esquivant')
+            self.direccio_esquivar = self.calcular_costat_lliure()
+            self.tipus_obstacle = None
+            self.estat = 10
+            self.iniciar_gir()
+        else:
+            self.estat = estat_seguent
+            self.cicles = 0
+            if estat_seguent in (10, 12, 14, 16):  # si el seguent és un gir, iniciar
+                self.iniciar_gir()
+
     def control_callback(self):
         cmd = TwistStamped()
         cmd.header.stamp = self.get_clock().now().to_msg()
         cmd.header.frame_id = 'base_link'
 
-        # Publicar flag en_maniobra durant els girs de l'esquiva
-        # durant els avanços la detecció està activa per veure obstacles nous
+        # Regla d'or: durant els girs detecció OFF, durant avanços detecció ON
         flag = Bool()
-        flag.data = self.estat in (10, 12, 14, 16)
+        flag.data = self.estat in (1, 10, 12, 14, 16)
         self.pub_maniobra.publish(flag)
 
         #  ESTAT FINAL
@@ -125,89 +145,68 @@ class MovimentNode(Node):
             else:
                 cmd.twist.linear.x = 0.0
                 cmd.twist.angular.z = 0.0
-
-                if self.tipus_obstacle == 'PARET':
-                    self.get_logger().warn('PARET detectada → Girant 45° cap al costat lliure')
-                    self.direccio_paret = self.calcular_costat_lliure()
-                    self.estat = 1
-                    self.iniciar_gir()
-                else:
-                    self.get_logger().warn('OBJECTE detectat → Esquivant')
-                    self.direccio_esquivar = self.calcular_costat_lliure()
-                    self.estat = 10
-                    self.iniciar_gir()
-                    self.get_logger().info(
-                        f'Gir {"ESQUERRA" if self.direccio_esquivar == 1 else "DRETA"}'
-                    )
-
-                self.tipus_obstacle = None
-                self.cicles = 0
+                self.comprovar_obstacle_pendent(0)
 
         #  MANIOBRA PARET - gir de 45° cap al costat lliure
         elif self.estat == 1:
             if self.angle_girat() < math.pi / 4:  # 45°
                 cmd.twist.angular.z = 0.5 * self.direccio_paret
             else:
-                self.estat = 0
-                self.cicles = 0
-                self.tipus_obstacle = None
+                # Gir acabat -> comprovar si hi ha obstacle nou
+                self.comprovar_obstacle_pendent(0)
 
         #  ESQUIVAR OBJECTE (costat decidit pel làser)
         elif self.estat == 10:  # Gir 90° cap al costat lliure
             if self.angle_girat() < math.pi / 2:
                 cmd.twist.angular.z = 0.5 * self.direccio_esquivar
             else:
-                self.estat = 11
-                self.cicles = 0
+                # Gir acabat -> comprovar si hi ha obstacle nou
+                self.comprovar_obstacle_pendent(11)
 
-        elif self.estat == 11:  # Avançar (esquivar lateral) - deteccio pausada
+        elif self.estat == 11:  # Avançar (esquivar lateral) - deteccio activa
             self.cicles += 1
             if self.cicles < 12:
                 cmd.twist.linear.x = 0.2
             else:
-                self.estat = 12
-                self.cicles = 0
-                self.iniciar_gir()
+                # Avanç acabat -> comprovar si hi ha obstacle nou
+                self.comprovar_obstacle_pendent(12)
 
         elif self.estat == 12:  # Gir 90° cap al costat contrari
             if self.angle_girat() < math.pi / 2:
                 cmd.twist.angular.z = -0.5 * self.direccio_esquivar
             else:
-                self.estat = 13
-                self.cicles = 0
+                # Gir acabat -> comprovar si hi ha obstacle nou
+                self.comprovar_obstacle_pendent(13)
 
-        elif self.estat == 13:  # Avançar (superar objecte) - deteccio pausada
+        elif self.estat == 13:  # Avançar (superar objecte) - deteccio activa
             self.cicles += 1
             if self.cicles < 25:
                 cmd.twist.linear.x = 0.2
             else:
-                self.estat = 14
-                self.cicles = 0
-                self.iniciar_gir()
+                # Avanç acabat -> comprovar si hi ha obstacle nou
+                self.comprovar_obstacle_pendent(14)
 
         elif self.estat == 14:  # Gir 90° cap al costat contrari
             if self.angle_girat() < math.pi / 2:
                 cmd.twist.angular.z = -0.5 * self.direccio_esquivar
             else:
-                self.estat = 15
-                self.cicles = 0
+                # Gir acabat -> comprovar si hi ha obstacle nou
+                self.comprovar_obstacle_pendent(15)
 
-        elif self.estat == 15:  # Avançar per tornar a la ruta - deteccio pausada
+        elif self.estat == 15:  # Avançar per tornar a la ruta - deteccio activa
             self.cicles += 1
             if self.cicles < 12:
                 cmd.twist.linear.x = 0.2
             else:
-                self.estat = 16
-                self.cicles = 0
-                self.iniciar_gir()
+                # Avanç acabat -> comprovar si hi ha obstacle nou
+                self.comprovar_obstacle_pendent(16)
 
         elif self.estat == 16:  # Gir 90° cap al costat original (redrecem)
             if self.angle_girat() < math.pi / 2:
                 cmd.twist.angular.z = 0.5 * self.direccio_esquivar
             else:
-                self.estat = 0
-                self.cicles = 0
-                self.tipus_obstacle = None
+                # Gir acabat -> comprovar si hi ha obstacle nou
+                self.comprovar_obstacle_pendent(0)
 
         self.pub.publish(cmd)
 

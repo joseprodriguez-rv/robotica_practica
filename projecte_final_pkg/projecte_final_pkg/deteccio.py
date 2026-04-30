@@ -84,11 +84,11 @@ class DeteccioNode(Node):
             distancia_min = min(distancies_valides)
 
             #si detectem un obstacle a prop
-            if distancia_min < 0.3:
+            if distancia_min < 0.25:
                 tipus = String()
                 marge = 0.10
                 propers = [d for d in distancies_valides if d < distancia_min + marge]
-                if len(propers)>60:
+                if len(propers) > 60:
                     tipus.data = 'PARET'
                     self.get_logger().info('PARET detectada')
                 # paret: més de 60 punts al con frontal
