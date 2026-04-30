@@ -7,6 +7,18 @@ from std_msgs.msg import Int32, String, Bool
 from sensor_msgs.msg import LaserScan
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
+#paràmetres per poder-los ajustar
+vel = 0.15
+w = 0.4
+dist_esq = 0.28
+dist_superar = 0.45
+ang_esq = math.pi/2 #90
+ang_paret = math.pi*3/4 #135
+marge_angle = 0.05
+
+estat_gir = (1,10,12,14,16)
+estat_avanç=(11,13,15)
+
 class MovimentNode(Node):
     def __init__(self):
         super().__init__('controlador_moviment')
@@ -38,18 +50,35 @@ class MovimentNode(Node):
 
         #  Variables per saber estat
         self.estat = 0
-        self.cicles = 0
-        self.direccio_s = 1
+        #trec cicles
+        self.direccio_paret = 1
         self.objectes = 0
         self.tipus_obstacle = None
         self.en_maniobra = False    # flag que s'envia a deteccio
         self.direccio_esquivar = 1  # 1=esquerra, -1=dreta (decidit pel laser)
         self.laser_ranges = []      # última lectura del làser
+        self.angle_actual = 0.0 #afegeixo
+        self.angle_inici_gir = None #afegeixo
+
+        #afegeixo odometria per mesurar distàncies
+        self.pos_x = 0.0
+        self.pos_y = 0.0
+        self.pos_x_inici = 0.0
+        self.pos_y_inici = 0.0
+        
 
     # Callbacks
     def laser_callback(self, msg):
-        self.laser_ranges = msg.ranges  # guardem per usar al control_callback
-
+        self.laser_ranges = list(msg.ranges)  # guardem per usar al control_callback
+   
+    def odom_callback(self, msg): #afegeixo odom
+        self.pos_x = msg.pose.pose.position.x
+        self.pos_y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        self.angle_actual = math.atan2(siny, cosy)
+        
     def comptador_callback(self, msg):
         self.objectes = msg.data
         if self.objectes >= 5:
@@ -57,6 +86,11 @@ class MovimentNode(Node):
             self.get_logger().info('Objectiu complert: 5 objectes trobats!')
 
     def tipus_callback(self, msg):
+        if self.estat in estats_gir:
+            return 
+        if self.estat is None:
+            return
+        #durant avançaments i recta fer deteccions
         self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
     def control_callback(self):
@@ -66,7 +100,7 @@ class MovimentNode(Node):
 
         # Publicar flag en_maniobra perquè deteccio sàpiga si pot publicar
         flag = Bool()
-        flag.data = self.estat in (1, 2, 3)  # només durant maniobra en S
+        flag.data = self.estat in estats_gir  # només durant maniobra en S
         self.pub_maniobra.publish(flag)
 
         #  ESTAT FINAL
@@ -79,123 +113,85 @@ class MovimentNode(Node):
         #  EXPLORAR EN LÍNIA RECTA
         if self.estat == 0:
             if self.tipus_obstacle is None:
-                cmd.twist.linear.x = 0.2
+                cmd.twist.linear.x = vel
                 cmd.twist.angular.z = 0.0
             else:
                 cmd.twist.linear.x = 0.0
                 cmd.twist.angular.z = 0.0
+                self.comprovar_obstacles(0)
+        #estat 1 (gir 135 per paret)
+        elif self.estat == 1:
+            if self.angle_girat()<ang_paret-marge_angle:
+                cmd.twist.angular.z = w * self.direccio_paret
+            else:
+                self.get_logger().info('Gir paret acabat')
+                self.comprovar_obstacle_pendent(0)
 
-                # Decidir cap a quin costat esquivar segons espai lliure al làser
-                if self.tipus_obstacle == 'PARET':
-                    self.get_logger().warn('PARET detectada → Maniobra en S')
-                    self.estat = 1
-                else:
-                    self.get_logger().warn('OBJECTE detectat → Esquivant')
-                    self.estat = 10
-
-                    if len(self.laser_ranges) >= 360:
-                        dreta = self.laser_ranges[300:360]
-                        esquerra = self.laser_ranges[0:60]
-                        valors_validsdre = [d for d in dreta if 0.1 < d < 6]
-                        valors_validsesq = [d for d in esquerra if 0.1 < d < 6]
-                        num_dre = len(valors_validsdre)
-                        num_esq = len(valors_validsesq)
-                        if num_esq > num_dre: #he canviat això pq vagi bé
-                            self.direccio_esquivar = 1
-                        else:
-                            self.direccio_esquivar = -1
-                        self.get_logger().info(
-                            f'Obstacle detectat → Espai lliure: ESQ={num_esq} rays, DRE={num_dre} rays → Gir {"ESQUERRA" if self.direccio_esquivar == 1 else "DRETA"}'
-                        )
-
+elif self.estat == 10:
+            if self.angle_girat() < ANG_ESQUIVA - MARGE_ANGLE:
+                cmd.twist.angular.z = VEL_ANGULAR * self.direccio_esquivar
+            else:
+                self.get_logger().info('Estat 10 acabat')
+                self.comprovar_obstacle_pendent(11)
+ 
+        elif self.estat == 11:
+            # Obstacle detectat durant l'avanç lateral -> aturar i gestionar
+            if self.tipus_obstacle is not None:
+                cmd.twist.linear.x = 0.0
+                self.get_logger().warn('Obstacle durant estat 11 -> gestionant')
+                self.comprovar_obstacle_pendent(11)
+            elif self.distancia_avancada() < DIST_ESQUIVA:
+                cmd.twist.linear.x = VEL_LINEAL
+            else:
+                self.get_logger().info('Estat 11 acabat')
+                self.comprovar_obstacle_pendent(12)
+ 
+        elif self.estat == 12:
+            if self.angle_girat() < ANG_ESQUIVA - MARGE_ANGLE:
+                cmd.twist.angular.z = -VEL_ANGULAR * self.direccio_esquivar
+            else:
+                self.get_logger().info('Estat 12 acabat')
+                self.comprovar_obstacle_pendent(13)
+ 
+        elif self.estat == 13:
+            # Obstacle detectat durant l'avanç frontal -> aturar i gestionar
+            if self.tipus_obstacle is not None:
+                cmd.twist.linear.x = 0.0
+                self.get_logger().warn('Obstacle durant estat 13 -> gestionant')
+                self.comprovar_obstacle_pendent(13)
+            elif self.distancia_avancada() < DIST_SUPERAR:
+                cmd.twist.linear.x = VEL_LINEAL
+            else:
+                self.get_logger().info('Estat 13 acabat')
+                self.comprovar_obstacle_pendent(14)
+ 
+        elif self.estat == 14:
+            if self.angle_girat() < ANG_ESQUIVA - MARGE_ANGLE:
+                cmd.twist.angular.z = -VEL_ANGULAR * self.direccio_esquivar
+            else:
+                self.get_logger().info('Estat 14 acabat')
+                self.comprovar_obstacle_pendent(15)
+ 
+        elif self.estat == 15:
+            # Obstacle detectat tornant a la ruta -> aturar i gestionar
+            if self.tipus_obstacle is not None:
+                cmd.twist.linear.x = 0.0
+                self.get_logger().warn('Obstacle durant estat 15 -> gestionant')
+                self.comprovar_obstacle_pendent(15)
+            elif self.distancia_avancada() < DIST_ESQUIVA:
+                cmd.twist.linear.x = VEL_LINEAL
+            else:
+                self.get_logger().info('Estat 15 acabat')
+                self.comprovar_obstacle_pendent(16)
+ 
+        elif self.estat == 16:
+            if self.angle_girat() < ang - MARGE_ANGLE:
+                cmd.twist.angular.z = w * self.direccio_esquivar
+            else:
+                self.get_logger().info('Estat 16 acabat -> tornant a estat 0')
                 self.tipus_obstacle = None
-                self.cicles = 0
-
-        #  MANIOBRA EN "S"
-        elif self.estat == 1:   # Primer gir (~90°)
-            self.cicles += 1
-            if self.cicles < 30:
-                cmd.twist.angular.z = 0.5 * self.direccio_s
-            else:
-                self.estat = 2
-                self.cicles = 0
-
-        elif self.estat == 2:   # Recta de canvi de fila
-            self.cicles += 1
-            if self.cicles < 20:
-                cmd.twist.linear.x = 0.15
-            else:
-                self.estat = 3
-                self.cicles = 0
-
-        elif self.estat == 3:   # Segon gir (~90°, mateix sentit)
-            self.cicles += 1
-            if self.cicles < 30:
-                cmd.twist.angular.z = 0.5 * self.direccio_s
-            else:
-                self.direccio_s *= -1   # Invertim per la propera S
-                self.estat = 0
-                self.cicles = 0
-                self.tipus_obstacle = None  # reset per no processar obstacle vell
-
-        #  ESQUIVAR OBJECTE (costat decidit pel làser)
-        elif self.estat == 10:  # Gir 90° cap al costat lliure
-            self.cicles += 1
-            if self.cicles < 30:
-                cmd.twist.angular.z = 0.5 * self.direccio_esquivar
-            else:
-                self.estat = 11
-                self.cicles = 0
-
-        elif self.estat == 11:  # Avançar (esquivar lateral)
-            self.cicles += 1
-            if self.cicles < 12:
-                cmd.twist.linear.x = 0.2
-            else:
-                self.estat = 12
-                self.cicles = 0
-
-        elif self.estat == 12:  # Gir 90° cap al costat contrari
-            self.cicles += 1
-            if self.cicles < 30:
-                cmd.twist.angular.z = -0.5 * self.direccio_esquivar
-            else:
-                self.estat = 13
-                self.cicles = 0
-
-        elif self.estat == 13:  # Avançar (superar objecte)
-            self.cicles += 1
-            if self.cicles < 25:
-                cmd.twist.linear.x = 0.2
-            else:
-                self.estat = 14
-                self.cicles = 0
-
-        elif self.estat == 14:  # Gir 90° cap al costat contrari
-            self.cicles += 1
-            if self.cicles < 30:
-                cmd.twist.angular.z = -0.5 * self.direccio_esquivar
-            else:
-                self.estat = 15
-                self.cicles = 0
-
-        elif self.estat == 15:  # Avançar per tornar a la ruta
-            self.cicles += 1
-            if self.cicles < 12:
-                cmd.twist.linear.x = 0.2
-            else:
-                self.estat = 16
-                self.cicles = 0
-
-        elif self.estat == 16:  # Gir 90° cap al costat original (redrecem)
-            self.cicles += 1
-            if self.cicles < 30:
-                cmd.twist.angular.z = 0.5 * self.direccio_esquivar
-            else:
-                self.estat = 0
-                self.cicles = 0
-                self.tipus_obstacle = None  # reset per no processar obstacle vell
-
+                self.comprovar_obstacle_pendent(0)
+ 
         self.pub.publish(cmd)
 
 
