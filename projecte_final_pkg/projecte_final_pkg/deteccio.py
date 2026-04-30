@@ -82,9 +82,10 @@ class DeteccioNode(Node):
 
         if len(distancies_valides) > 0:
             distancia_min = min(distancies_valides)
+            llindar = 0.1 if self.en_maniobra else 0.25
 
             #si detectem un obstacle a prop
-            if distancia_min < 0.25:
+            if distancia_min < llindar:
                 tipus = String()
                 marge = 0.10
                 propers = [d for d in distancies_valides if d < distancia_min + marge]
