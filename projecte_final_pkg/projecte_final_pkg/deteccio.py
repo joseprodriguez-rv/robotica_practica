@@ -73,7 +73,7 @@ class DeteccioNode(Node):
             return
 
         #con frontal
-        part_esquerra = msg.ranges[0:61]
+        part_esquerra = msg.ranges[0:60]
         part_dreta = msg.ranges[300:360]
         con_frontal = list(part_esquerra) + list(part_dreta)
 
@@ -84,7 +84,7 @@ class DeteccioNode(Node):
             distancia_min = min(distancies_valides)
 
             #si detectem un obstacle a prop
-            if distancia_min < 0.4:
+            if distancia_min < 0.3:
                 tipus = String()
                 marge = 0.10
                 propers = [d for d in distancies_valides if d < distancia_min + marge]
