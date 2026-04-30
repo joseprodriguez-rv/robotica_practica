@@ -88,7 +88,7 @@ class DeteccioNode(Node):
                 tipus = String()
                 # paret: més de 30 punts al con frontal
                 # objecte petit (ampolla, estoig, cilindre): menys de 30 punts
-                if len(distancies_valides) > 30:
+                if len(distancies_valides) > 90:
                     tipus.data = 'PARET'
                     self.get_logger().info('PARET detectada')
                 else:
