@@ -88,7 +88,7 @@ class DeteccioNode(Node):
             if distancia_min < llindar:
                 #si és mur o objecte
                 tipus = String()
-                if len(distancies_valides) > 90:
+                if len(distancies_valides) > 75: #he canviat a 75 pq detecti millor les parets
                     tipus.data = 'PARET'
                     self.get_logger().info('PARET detectada')
                 else:
