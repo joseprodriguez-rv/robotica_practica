@@ -60,9 +60,6 @@ class MovimentNode(Node):
         self.yaw_actual   = 0.0
         self.yaw_objectiu = None
 
-        # CORRECCIÓ #10: aturat_emergencia s'inicialitza a False i es reinicia correctament
-        self.aturat_emergencia = False
-
         # CORRECCIÓ #9 (debounce integrat al moviment): mínim de cicles entre deteccions
         self._cicles_desde_maniobra = 0
 
@@ -150,21 +147,6 @@ class MovimentNode(Node):
         if self.estat is None:
             cmd.twist.linear.x  = 0.0
             cmd.twist.angular.z = 0.0
-            self.pub.publish(cmd)
-            return
-
-        # ── FRE D'EMERGÈNCIA ──
-        # CORRECCIÓ #1: s'aplica a TOTS els estats, inclòs l'estat 0
-        if not self.frontal_lliure():
-            self.aturat_emergencia = True
-        else:
-            # CORRECCIÓ #10: reiniciem el flag quan el camí és lliure
-            self.aturat_emergencia = False
-
-        if self.aturat_emergencia:
-            cmd.twist.linear.x  = 0.0
-            cmd.twist.angular.z = 0.0
-            self.get_logger().warn('EMERGÈNCIA: obstacle frontal!')
             self.pub.publish(cmd)
             return
 
