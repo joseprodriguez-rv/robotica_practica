@@ -70,7 +70,9 @@ class MovimentNode(Node):
             self.get_logger().info('Objectiu complert: 5 objectes trobats!')
 
     def tipus_callback(self, msg):
-        self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
+        # només actualitza si no estem girant
+        if self.estat not in (1, 10, 12, 14, 16):
+            self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
     def iniciar_gir(self):
         """Guardar angle inicial quan comença un gir"""
