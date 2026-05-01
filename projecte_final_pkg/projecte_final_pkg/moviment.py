@@ -154,7 +154,7 @@ class MovimentNode(Node):
                 cmd.twist.angular.z = 0.0
                 self.comprovar_obstacle(0)
 
-        #  MANIOBRA PARET - estat 4: alineament 45° cap al costat lliure
+        #  MANIOBRA PARET - estat 1: alineament 45° cap al costat lliure
         elif self.estat == 1:
             if self.angle_girat() < math.pi / 4:  # 45°
                 cmd.twist.angular.z = 0.5 * self.direccio_paret
@@ -162,7 +162,7 @@ class MovimentNode(Node):
                 # Alineament acabat -> girar 90° cap al costat lliure
                 self.comprovar_obstacle(1)
 
-        #  MANIOBRA PARET - estat 1: gir 90° cap al costat lliure
+        #  MANIOBRA PARET - estat 2: gir 90° cap al costat lliure
         elif self.estat == 2:
             if self.angle_girat() < math.pi / 2:  # 90°
                 cmd.twist.angular.z = 0.5 * self.direccio_paret
