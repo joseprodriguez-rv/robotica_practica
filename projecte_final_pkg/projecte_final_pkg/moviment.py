@@ -71,7 +71,7 @@ class MovimentNode(Node):
 
     def tipus_callback(self, msg):
         # només actualitza si no estem girant
-        if self.estat not in (1, 3, 4, 10, 12, 14, 16):
+        if self.estat not in (1, 2, 10, 12, 14, 16):
             self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
     def iniciar_gir(self):
