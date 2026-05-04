@@ -42,6 +42,8 @@ class CartografNode(Node):
             self.pub_cartograf.publish(msg_comptador)
 
             self.get_logger().info(f'Objecte #{self.comptador_oficial} registrat a X={x:.2f}, Y={y:.2f}')
+        else:
+            self.get_logger().info(f'Nova detecció massa prop. Descartat a X={x:.2f}, Y={y:.2f}')
 
 def main(args=None):
     rclpy.init(args=args)
