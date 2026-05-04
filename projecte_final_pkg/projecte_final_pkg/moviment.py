@@ -1,248 +1,140 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped
-from std_msgs.msg import Int32, String
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+from std_msgs.msg import String, Int32
 import math
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
-class MovimentNode(Node):
+class DeteccioNode(Node):
     def __init__(self):
-        super().__init__('controlador_moviment')
+        super().__init__('deteccio')
 
-        qos_sensor = QoSProfile(
+        #guardar on està el robot
+        self.robot_x = 0.0
+        self.robot_y = 0.0
+        self.robot_ang = 0.0
+
+        # qos per al sensor
+        qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
             depth=10
         )
 
-        # QoS per al moviment
-        qos_moviment = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.VOLATILE,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10
-        )
+        #subs al laser
+        self.sub_laser = self.create_subscription(
+            LaserScan, '/scan', self.laser_callback, qos_profile)
 
-        # Subscripcions
-        self.sub_laser = self.create_subscription(LaserScan, '/scan', self.laser_callback, qos_sensor)
-        self.sub_odom = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
-        self.sub_comptador = self.create_subscription(Int32, '/comptador_objectes', self.comptador_callback, 10)
-        self.sub_tipus = self.create_subscription(String, '/tipus_obstacle', self.tipus_callback, 10)
-        self.timer = self.create_timer(0.1, self.control_callback)
+        #subs a l'odom
+        self.sub_odom = self.create_subscription(
+            Odometry, '/odom', self.odom_callback, 10)
 
-        # Publicador
-        self.pub = self.create_publisher(TwistStamped, '/cmd_vel', qos_moviment)
-        self.pub_maniobra = self.create_publisher(Int32, '/en_maniobra', 10)  # flag per a deteccio
-        self.get_logger().info('Node de moviment actiu...')
+        #subscripció a maniobra — 0=explorant, 1=girant (OFF), 2=esquiva activa (llindar reduït)
+        self.en_maniobra = 0
+        self.sub_maniobra = self.create_subscription(
+            Int32, '/en_maniobra', self.maniobra_callback, 10)
 
-        #  Variables per saber estat
-        self.estat = 0
-        self.cicles = 0
+        #subscripció al comptador d'objectes
         self.objectes = 0
-        self.tipus_obstacle = None
-        self.direccio_esquivar = 1  # 1=esquerra, -1=dreta (decidit pel laser)
-        self.direccio_paret = 1     # 1=esquerra, -1=dreta (decidit pel laser)
-        self.laser_ranges = []      # última lectura del làser
+        self.sub_comptador = self.create_subscription(
+            Int32, '/comptador_objectes', self.comptador_callback, 10)
 
-        # Odometria per als girs
-        self.angle_actual = 0.0     # yaw actual del robot
-        self.angle_inici_gir = None # yaw quan va començar el gir
+        #publisher objecte en odometria amb x i y
+        self.pub_objecte = self.create_publisher(Odometry, '/objecte_detectat', 10)
+        self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
 
-    # Callbacks
-    def laser_callback(self, msg):
-        self.laser_ranges = msg.ranges  # guardem per usar al control_callback
+        self.get_logger().info('Node de Detecció actiu')
 
     def odom_callback(self, msg):
-        # Convertir quaternion -> yaw
-        q = msg.pose.pose.orientation
-        siny = 2.0 * (q.w * q.z + q.x * q.y)
-        cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-        self.angle_actual = math.atan2(siny, cosy)
+        #posició actual
+        self.robot_x = msg.pose.pose.position.x
+        self.robot_y = msg.pose.pose.position.y
+
+        #conversió a Yaw
+        qx = msg.pose.pose.orientation.x
+        qy = msg.pose.pose.orientation.y
+        qz = msg.pose.pose.orientation.z
+        qw = msg.pose.pose.orientation.w
+        siny_cosp = 2 * (qw * qz + qx * qy)
+        cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
+        self.robot_ang = math.atan2(siny_cosp, cosy_cosp)
+
+    def maniobra_callback(self, msg):
+        self.en_maniobra = msg.data
 
     def comptador_callback(self, msg):
         self.objectes = msg.data
-        if self.objectes >= 5:
-            self.estat = None
-            self.get_logger().info('Objectiu complert: 5 objectes trobats!')
 
-    def tipus_callback(self, msg):
-        # només actualitza si no estem girant
-        if self.estat not in (1, 2, 10, 12, 14, 16):
-            self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
-
-    def iniciar_gir(self):
-        """Guardar angle inicial quan comença un gir"""
-        self.angle_inici_gir = self.angle_actual
-
-    def angle_girat(self):
-        """Retorna quants radians hem girat des de angle_inici_gir (sempre positiu)"""
-        if self.angle_inici_gir is None:
-            return 0.0
-        diff = self.angle_actual - self.angle_inici_gir
-        # Normalitzar a [-pi, pi]
-        diff = (diff + math.pi) % (2 * math.pi) - math.pi
-        return abs(diff)
-
-    def calcular_costat_lliure(self):
-        """Decideix cap a quin costat hi ha més espai lliure - 180° frontals"""
-        if len(self.laser_ranges) >= 360:
-            dreta = self.laser_ranges[270:360]
-            esquerra = self.laser_ranges[0:90]
-            valors_validsdre = [d for d in dreta if 0.1 < d < 6]
-            valors_validsesq = [d for d in esquerra if 0.1 < d < 6]
-            num_dre = len(valors_validsdre)
-            num_esq = len(valors_validsesq)
-            if num_esq > num_dre:
-                return -1  # més espai a l'esquerra
-            else:
-                return 1   # més espai a la dreta
-        return 1  # per defecte
-
-    def comprovar_obstacle(self, estat_seguent):
-        """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
-        if self.tipus_obstacle == 'PARET':
-            self.get_logger().warn('PARET detectada -> Alineant amb paret i girant 45° cap al costat lliure')
-            self.direccio_paret = self.calcular_costat_lliure()
-            self.tipus_obstacle = None
-            self.estat = 1
-            self.iniciar_gir()
-        elif self.tipus_obstacle == 'OBJECTE':
-            self.get_logger().warn('OBJECTE detectat -> Esquivant')
-            self.direccio_esquivar = self.calcular_costat_lliure()
-            self.tipus_obstacle = None
-            self.estat = 10
-            self.iniciar_gir()
-        else:
-            self.estat = estat_seguent
-            self.cicles = 0
-            if estat_seguent in (10, 12, 14, 16):  # si el seguent és un gir, iniciar
-                self.iniciar_gir()
-
-    def control_callback(self):
-        cmd = TwistStamped()
-        cmd.header.stamp = self.get_clock().now().to_msg()
-        cmd.header.frame_id = 'base_link'
-
-        # Regla d'or: durant els girs detecció OFF, durant avanços detecció ON
-        en_maniobra = Int32()
-        if self.estat in (1, 2, 10, 12, 14, 16):
-            en_maniobra.data = 1   # girant -> detecció OFF
-        elif self.estat in (11, 13, 15):
-            en_maniobra.data = 2   # avançant en esquiva -> llindar reduït
-        else:
-            en_maniobra.data = 0   # explorant -> detecció normal
-        self.pub_maniobra.publish(en_maniobra)
-
-        #  ESTAT FINAL
-        if self.estat is None:
-            cmd.twist.linear.x = 0.0
-            cmd.twist.angular.z = 0.0
-            self.pub.publish(cmd)
+    def laser_callback(self, msg):
+        # durant girs (en_maniobra==1) detecció completament desactivada
+        if self.en_maniobra == 1 or self.objectes >= 5:
             return
 
-        #  EXPLORAR EN LÍNIA RECTA
-        if self.estat == 0:
-            if self.tipus_obstacle is None:
-                cmd.twist.linear.x = 0.2
-                cmd.twist.angular.z = 0.0
-            else:
-                cmd.twist.linear.x = 0.0
-                cmd.twist.angular.z = 0.0
-                self.comprovar_obstacle(0)
+        #con frontal
+        if self.en_maniobra == 2:
+            part_esquerra = msg.ranges[0:20]
+            part_dreta = msg.ranges[340:360]
+        else:
+            part_esquerra = msg.ranges[0:60]
+            part_dreta = msg.ranges[300:360]
+            
+        con_frontal = list(part_esquerra) + list(part_dreta)
 
-        #  MANIOBRA PARET - estat 1: alineament 45° cap al costat lliure
-        elif self.estat == 1:
-            if self.angle_girat() < math.pi / 4:  # 45°
-                cmd.twist.angular.z = 0.5 * self.direccio_paret
-            else:
-                # Alineament acabat -> girar 90° cap al costat lliure
-                # No volem que comprovi si PARET o OBJECTE perquè ja ho sabem
-                self.direccio_paret = self.calcular_costat_lliure()
-                self.estat = 2
-                self.iniciar_gir()
+        #treure valors invàlids
+        distancies_valides = [d for d in con_frontal if msg.range_min < d < msg.range_max]
 
-        #  MANIOBRA PARET - estat 2: gir 90° cap al costat lliure
-        elif self.estat == 2:
-            if self.angle_girat() < math.pi / 2:  # 90°
-                cmd.twist.angular.z = 0.5 * self.direccio_paret
-            else:
-                # Gir acabat -> comprovar si hi ha obstacle nou
-                self.comprovar_obstacle(0)
+        if len(distancies_valides) > 0:
+            distancia_min = min(distancies_valides)
+            llindar = 0.20 if self.en_maniobra == 2 else 0.25
 
-        #  ESQUIVAR OBJECTE (costat decidit pel làser)
-        elif self.estat == 10:  # Gir 90° cap al costat lliure
-            if self.angle_girat() < math.pi / 2:
-                cmd.twist.angular.z = 0.5 * self.direccio_esquivar
-            else:
-                # Gir acabat -> comprovar si hi ha obstacle nou
-                self.comprovar_obstacle(11)
+            #si detectem un obstacle a prop
+            if distancia_min < llindar:
+                tipus = String()
+                marge = 0.10
+                propers = [d for d in distancies_valides if d < distancia_min + marge]
+                if len(propers) > 60:
+                    tipus.data = 'PARET'
+                    self.get_logger().info('PARET detectada')
+                # paret: més de 60 punts al con frontal
+                # objecte petit (ampolla, estoig, cilindre): menys de 60 punts
+                else:
+                    tipus.data = 'OBJECTE'
+                    num_min = msg.ranges.index(distancia_min) #per trobar l'angle on està l'objecte
+                    angle = msg.angle_min + (num_min * msg.angle_increment)
+                    self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
+                    self.enviar_posicio_objecte(distancia_min, angle)
+                self.pub_tipus.publish(tipus)
 
-        elif self.estat == 11:  # Avançar (esquivar lateral) - deteccio activa
-            self.cicles += 1
-            if self.cicles < 12:
-                cmd.twist.linear.x = 0.2
-            else:
-                # Avanç acabat -> comprovar si hi ha obstacle nou
-                self.comprovar_obstacle(12)
+    def enviar_posicio_objecte(self, r, a):
+        #suma d'angle del robot + angle del laser
+        angle_final = self.robot_ang + a
 
-        elif self.estat == 12:  # Gir 90° cap al costat contrari
-            if self.angle_girat() < math.pi / 2:
-                cmd.twist.angular.z = -0.5 * self.direccio_esquivar
-            else:
-                # Gir acabat -> comprovar si hi ha obstacle nou
-                self.comprovar_obstacle(13)
+        obj_x = self.robot_x + (r * math.cos(angle_final))
+        obj_y = self.robot_y + (r * math.sin(angle_final))
 
-        elif self.estat == 13:  # Avançar (superar objecte) - deteccio activa
-            self.cicles += 1
-            if self.cicles < 25:
-                cmd.twist.linear.x = 0.2
-            else:
-                # Avanç acabat -> comprovar si hi ha obstacle nou
-                self.comprovar_obstacle(14)
+        msg_obj = Odometry()
+        msg_obj.header.stamp = self.get_clock().now().to_msg()
+        msg_obj.header.frame_id = 'map'
+        msg_obj.pose.pose.position.x = float(obj_x)
+        msg_obj.pose.pose.position.y = float(obj_y)
 
-        elif self.estat == 14:  # Gir 90° cap al costat contrari
-            if self.angle_girat() < math.pi / 2:
-                cmd.twist.angular.z = -0.5 * self.direccio_esquivar
-            else:
-                # Gir acabat -> comprovar si hi ha obstacle nou
-                self.comprovar_obstacle(15)
-
-        elif self.estat == 15:  # Avançar per tornar a la ruta - deteccio activa
-            self.cicles += 1
-            if self.cicles < 12:
-                cmd.twist.linear.x = 0.2
-            else:
-                # Avanç acabat -> comprovar si hi ha obstacle nou
-                self.comprovar_obstacle(16)
-
-        elif self.estat == 16:  # Gir 90° cap al costat original (redrecem)
-            if self.angle_girat() < math.pi / 2:
-                cmd.twist.angular.z = 0.5 * self.direccio_esquivar
-            else:
-                # Gir acabat -> comprovar si hi ha obstacle nou
-                self.comprovar_obstacle(0)
-
-        self.pub.publish(cmd)
-
+        self.pub_objecte.publish(msg_obj)
 
 def main(args=None):
     rclpy.init(args=args)
-    node = MovimentNode()
+    node = DeteccioNode()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        stop = TwistStamped()
-        stop.header.stamp = node.get_clock().now().to_msg()
-        stop.twist.linear.x = 0.0
-        stop.twist.angular.z = 0.0
-        node.pub.publish(stop)
+        node.get_logger().info('Aturant node...')
     finally:
         node.destroy_node()
         rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
+
+#es llegeix la posició amb msg.pose.pose.position.x
