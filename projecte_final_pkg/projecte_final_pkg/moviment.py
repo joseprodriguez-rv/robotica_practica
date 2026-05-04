@@ -73,7 +73,7 @@ class MovimentNode(Node):
             nom = self.noms_estat.get(self.estat, f'DESCONEGUT ({self.estat})')
             self.get_logger().info(f'[ESTAT {self.estat}] {nom}')
             self.estat_loguejat = self.estat
-        
+
     # Callbacks
     def laser_callback(self, msg):
         self.laser_ranges = msg.ranges  # guardem per usar al control_callback
@@ -207,7 +207,9 @@ class MovimentNode(Node):
 
         elif self.estat == 11:  # Avançar (esquivar lateral) - deteccio activa
             self.cicles += 1
-            if self.cicles < 12:
+            if tipus_obstacle is not None:
+                self.comprovar_obstacle(12)
+            elif self.cicles < 12:
                 cmd.twist.linear.x = 0.2
             else:
                 # Avanç acabat -> comprovar si hi ha obstacle nou
@@ -222,7 +224,9 @@ class MovimentNode(Node):
 
         elif self.estat == 13:  # Avançar (superar objecte) - deteccio activa
             self.cicles += 1
-            if self.cicles < 25:
+            if tipus_obstacle is not None:
+                self.comprovar_obstacle(14)
+            elif self.cicles < 25:
                 cmd.twist.linear.x = 0.2
             else:
                 # Avanç acabat -> comprovar si hi ha obstacle nou
@@ -237,7 +241,9 @@ class MovimentNode(Node):
 
         elif self.estat == 15:  # Avançar per tornar a la ruta - deteccio activa
             self.cicles += 1
-            if self.cicles < 12:
+            if tipus_obstacle is not None:
+                self.comprovar_obstacle(16)
+            elif self.cicles < 12:
                 cmd.twist.linear.x = 0.2
             else:
                 # Avanç acabat -> comprovar si hi ha obstacle nou
