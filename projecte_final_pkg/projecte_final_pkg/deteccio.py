@@ -73,8 +73,13 @@ class DeteccioNode(Node):
             return
 
         #con frontal
-        part_esquerra = msg.ranges[0:60]
-        part_dreta = msg.ranges[300:360]
+        if self.en_maniobra == 2:
+            part_esquerra = msg.ranges[0:20]
+            part_dreta = msg.ranges[340:360]
+        else:
+            part_esquerra = msg.ranges[0:60]
+            part_dreta = msg.ranges[300:360]
+            
         con_frontal = list(part_esquerra) + list(part_dreta)
 
         #treure valors invàlids
@@ -82,7 +87,7 @@ class DeteccioNode(Node):
 
         if len(distancies_valides) > 0:
             distancia_min = min(distancies_valides)
-            llindar = 0.15 if self.en_maniobra == 2 else 0.25
+            llindar = 0.20 if self.en_maniobra == 2 else 0.25
 
             #si detectem un obstacle a prop
             if distancia_min < llindar:
