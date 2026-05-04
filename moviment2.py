@@ -89,7 +89,7 @@ class MovimentNode(Node):
             self.get_logger().info('Objectiu complert: 5 objectes trobats!')
 
     def tipus_callback(self, msg):
-        if self.estat in estats_gir:
+        if self.estat in estat_gir:
             return 
         if self.estat is None:
             return
@@ -164,7 +164,7 @@ class MovimentNode(Node):
 
         # Publicar flag en_maniobra perquè deteccio sàpiga si pot publicar
         flag = Bool()
-        flag.data = self.estat in estats_gir  # només durant maniobra en S
+        flag.data = self.estat in estat_gir  # només durant maniobra en S
         self.pub_maniobra.publish(flag)
 
         #  ESTAT FINAL
