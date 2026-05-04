@@ -17,9 +17,4 @@ def generate_launch_description():
       executable='cartograf_exe', # El nom que posarem al setup.py 
       name='cartograf' 
     ), 
-    Node( 
-      package='projecte_final_pkg', 
-      executable='safety_node_exe', # El nom que posarem al setup.py 
-      name='safety' 
-    ), 
   ]) 
