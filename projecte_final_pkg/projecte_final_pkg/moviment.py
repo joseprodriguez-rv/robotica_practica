@@ -105,7 +105,7 @@ class MovimentNode(Node):
     def comprovar_obstacle(self, estat_seguent):
         """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
         if self.tipus_obstacle == 'PARET':
-            self.get_logger().warn('PARET detectada -> Alineant amb paret i girant 90° cap al costat lliure')
+            self.get_logger().warn('PARET detectada -> Alineant amb paret i girant 45° cap al costat lliure')
             self.direccio_paret = self.calcular_costat_lliure()
             self.tipus_obstacle = None
             self.estat = 1
@@ -119,7 +119,7 @@ class MovimentNode(Node):
         else:
             self.estat = estat_seguent
             self.cicles = 0
-            if estat_seguent in (2, 10, 12, 14, 16):  # si el seguent és un gir, iniciar
+            if estat_seguent in (10, 12, 14, 16):  # si el seguent és un gir, iniciar
                 self.iniciar_gir()
 
     def control_callback(self):
@@ -160,7 +160,10 @@ class MovimentNode(Node):
                 cmd.twist.angular.z = 0.5 * self.direccio_paret
             else:
                 # Alineament acabat -> girar 90° cap al costat lliure
-                self.comprovar_obstacle(1)
+                # No volem que comprovi si PARET o OBJECTE perquè ja ho sabem
+                self.direccio_paret = self.calcular_costat_lliure()
+                self.estat = 2
+                self.iniciar_gir()
 
         #  MANIOBRA PARET - estat 2: gir 90° cap al costat lliure
         elif self.estat == 2:
