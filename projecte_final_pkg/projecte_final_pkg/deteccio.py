@@ -67,6 +67,38 @@ class DeteccioNode(Node):
     def comptador_callback(self, msg):
         self.objectes = msg.data
 
+    def classificar_obstacle(self, msg, distancia_min):
+        marge = 0.10
+
+        # Zona central estricta — on hauria d'estar un objecte petit
+        centre = list(msg.ranges[0:20]) + list(msg.ranges[340:360])
+        centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
+        propers_centre = [d for d in centre_valids if d < distancia_min + marge]
+
+        # Laterals a ~90°
+        lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
+        lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
+
+        # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
+        llindar_lateral = 0.5  # metres
+        esq_bloquejat = (
+            len(lateral_esq) > 0 and
+            sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.9
+        )
+        dre_bloquejat = (
+            len(lateral_dre) > 0 and
+            sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.9
+        )
+
+        # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
+        es_objecte_petit = len(propers_centre) > 0 and len(propers_centre) < 15
+        lateral_bloquejat = esq_bloquejat or dre_bloquejat
+
+        if es_objecte_petit and not lateral_bloquejat:
+            return 'OBJECTE'
+        else:
+            return 'PARET'
+
     def laser_callback(self, msg):
         # durant girs (en_maniobra==1) detecció completament desactivada
         if self.en_maniobra == 1 or self.objectes >= 5:
@@ -74,12 +106,12 @@ class DeteccioNode(Node):
 
         #con frontal
         if self.en_maniobra == 2:
-            part_esquerra = msg.ranges[0:40]
-            part_dreta = msg.ranges[320:360]
+            part_esquerra = msg.ranges[0:20]
+            part_dreta = msg.ranges[340:360]
         else:
             part_esquerra = msg.ranges[0:60]
             part_dreta = msg.ranges[300:360]
-            
+
         con_frontal = list(part_esquerra) + list(part_dreta)
 
         #treure valors invàlids
@@ -92,19 +124,16 @@ class DeteccioNode(Node):
             #si detectem un obstacle a prop
             if distancia_min < llindar:
                 tipus = String()
-                marge = 0.10
-                propers = [d for d in distancies_valides if d < distancia_min + marge]
-                if len(propers) > 60:
-                    tipus.data = 'PARET'
+                tipus.data = self.classificar_obstacle(msg, distancia_min)
+
+                if tipus.data == 'PARET':
                     self.get_logger().info('PARET detectada')
-                # paret: més de 60 punts al con frontal
-                # objecte petit (ampolla, estoig, cilindre): menys de 60 punts
                 else:
-                    tipus.data = 'OBJECTE'
-                    num_min = msg.ranges.index(distancia_min) #per trobar l'angle on està l'objecte
+                    num_min = msg.ranges.index(distancia_min)
                     angle = msg.angle_min + (num_min * msg.angle_increment)
                     self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
                     self.enviar_posicio_objecte(distancia_min, angle)
+
                 self.pub_tipus.publish(tipus)
 
     def enviar_posicio_objecte(self, r, a):
