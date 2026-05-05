@@ -52,8 +52,7 @@ class MovimentNode(Node):
         # Odometria per als girs
         self.angle_actual = 0.0     # yaw actual del robot
         self.angle_inici_gir = None # yaw quan va començar el gir
-
-
+        
         self.noms_estat = {
             None: 'FINAL - Objectiu complert',
             0: 'EXPLORAR en linia recta',
@@ -119,9 +118,9 @@ class MovimentNode(Node):
             num_dre = len(valors_validsdre)
             num_esq = len(valors_validsesq)
             if num_esq > num_dre:
-                return -1  # més espai a l'esquerra
+                return 1  # més espai a l'esquerra
             else:
-                return 1   # més espai a la dreta
+                return -1   # més espai a la dreta
         return 1  # per defecte
 
     def comprovar_obstacle(self, estat_seguent):
@@ -207,7 +206,7 @@ class MovimentNode(Node):
 
         elif self.estat == 11:  # Avançar (esquivar lateral) - deteccio activa
             self.cicles += 1
-            if tipus_obstacle is not None:
+            if self.tipus_obstacle is not None:
                 self.comprovar_obstacle(12)
             elif self.cicles < 12:
                 cmd.twist.linear.x = 0.2
@@ -224,7 +223,7 @@ class MovimentNode(Node):
 
         elif self.estat == 13:  # Avançar (superar objecte) - deteccio activa
             self.cicles += 1
-            if tipus_obstacle is not None:
+            if self.tipus_obstacle is not None:
                 self.comprovar_obstacle(14)
             elif self.cicles < 25:
                 cmd.twist.linear.x = 0.2
@@ -241,7 +240,7 @@ class MovimentNode(Node):
 
         elif self.estat == 15:  # Avançar per tornar a la ruta - deteccio activa
             self.cicles += 1
-            if tipus_obstacle is not None:
+            if self.tipus_obstacle is not None:
                 self.comprovar_obstacle(16)
             elif self.cicles < 12:
                 cmd.twist.linear.x = 0.2
