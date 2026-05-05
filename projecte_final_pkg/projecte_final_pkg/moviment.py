@@ -126,14 +126,16 @@ class MovimentNode(Node):
     def comprovar_obstacle(self, estat_seguent):
         """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
         if self.tipus_obstacle == 'PARET':
-            self.get_logger().warn('PARET detectada -> Alineant amb paret i girant 45° cap al costat lliure')
             self.direccio_paret = self.calcular_costat_lliure()
+            self.get_logger().warn(f'PARET detectada -> Alineant amb paret i girant 45° cap a {
+                "l'ESQUERRA" if self.direccio_paret == 1 else "la DRETA"}')
             self.tipus_obstacle = None
             self.estat = 1
             self.iniciar_gir()
         elif self.tipus_obstacle == 'OBJECTE':
-            self.get_logger().warn('OBJECTE detectat -> Esquivant')
             self.direccio_esquivar = self.calcular_costat_lliure()
+            self.get_logger().warn(f'OBJECTE detectat -> Esquivant cap a {
+                "l'ESQUERRA" if self.direccio_esquivar == 1 else "la DRETA"}')
             self.tipus_obstacle = None
             self.estat = 10
             self.iniciar_gir()
