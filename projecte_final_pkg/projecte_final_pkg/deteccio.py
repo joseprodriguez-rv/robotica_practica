@@ -91,7 +91,7 @@ class DeteccioNode(Node):
         )
 
         # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte_petit = len(propers_centre) > 0 and len(propers_centre) < 15
+        es_objecte_petit = len(propers_centre) > 0 and len(propers_centre) < 40
         lateral_bloquejat = esq_bloquejat or dre_bloquejat
 
         if es_objecte_petit and not lateral_bloquejat:
