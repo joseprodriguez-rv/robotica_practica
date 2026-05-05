@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Int32
@@ -14,7 +15,6 @@ class CartografNode(Node):
         self.sub_deteccio = self.create_subscription(
             Odometry, '/objecte_detectat', self.callback, 10
         )
-
         self.pub_cartograf = self.create_publisher(
             Int32, '/comptador_objectes', 10
         )
@@ -23,11 +23,12 @@ class CartografNode(Node):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
 
-        # 0.35m — suficient per absorbir soroll d'odometria
-        # però prou petit per distingir objectes propers (ampolles, estoigs)
+        # FIX #3: descartar coordenades (0,0) — odometria no inicialitzada
+        if abs(x) < 0.01 and abs(y) < 0.01:
+            return
+
         radi_proximitat = 0.35
 
-        # filtrem deteccions repetides
         es_repetit = any(
             math.sqrt((x - obj[0])**2 + (y - obj[1])**2) < radi_proximitat
             for obj in self.mapa
@@ -35,20 +36,20 @@ class CartografNode(Node):
 
         if not es_repetit:
             self.mapa.append((x, y))
-
             self.comptador_oficial += 1
+
             msg_comptador = Int32()
             msg_comptador.data = self.comptador_oficial
             self.pub_cartograf.publish(msg_comptador)
 
-            self.get_logger().info(f'Objecte #{self.comptador_oficial} registrat a X={x:.2f}, Y={y:.2f}')
-        else:
-            self.get_logger().info(f'Nova detecció massa prop. Descartat a X={x:.2f}, Y={y:.2f}')
+            self.get_logger().info(
+                f'Objecte #{self.comptador_oficial} registrat a X={x:.2f}, Y={y:.2f}'
+            )
+            self.get_logger().info(f'Mapa actual: {self.mapa}')
 
 def main(args=None):
     rclpy.init(args=args)
     node = CartografNode()
-
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
