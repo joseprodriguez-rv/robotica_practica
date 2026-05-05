@@ -118,9 +118,9 @@ class MovimentNode(Node):
             num_dre = len(valors_validsdre)
             num_esq = len(valors_validsesq)
             if num_esq > num_dre:
-                return 1  # més espai a l'esquerra
+                return -1  # més espai a l'esquerra
             else:
-                return -1   # més espai a la dreta
+                return 1   # més espai a la dreta
         return 1  # per defecte
 
     def comprovar_obstacle(self, estat_seguent):
