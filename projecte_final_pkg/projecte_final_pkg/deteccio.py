@@ -11,54 +11,44 @@ class DeteccioNode(Node):
     def __init__(self):
         super().__init__('deteccio')
 
-        #guardar on està el robot
-        self.robot_x = 0.0
-        self.robot_y = 0.0
+        self.robot_x   = 0.0
+        self.robot_y   = 0.0
         self.robot_ang = 0.0
 
-        # qos per al sensor
-        qos_profile = QoSProfile(
+        qos_sensor = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
             depth=10
         )
 
-        #subs al laser
-        self.sub_laser = self.create_subscription(
-            LaserScan, '/scan', self.laser_callback, qos_profile)
+        self.sub_laser     = self.create_subscription(LaserScan, '/scan', self.laser_callback, qos_sensor)
+        self.sub_odom      = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        self.sub_maniobra  = self.create_subscription(Int32, '/en_maniobra', self.maniobra_callback, 10)
+        self.sub_comptador = self.create_subscription(Int32, '/comptador_objectes', self.comptador_callback, 10)
 
-        #subs a l'odom
-        self.sub_odom = self.create_subscription(
-            Odometry, '/odom', self.odom_callback, 10)
-
-        #subscripció a maniobra — 0=explorant, 1=girant (OFF), 2=esquiva activa (llindar reduït)
-        self.en_maniobra = 0
-        self.sub_maniobra = self.create_subscription(
-            Int32, '/en_maniobra', self.maniobra_callback, 10)
-
-        #subscripció al comptador d'objectes
-        self.objectes = 0
-        self.sub_comptador = self.create_subscription(
-            Int32, '/comptador_objectes', self.comptador_callback, 10)
-
-        #publisher objecte en odometria amb x i y
         self.pub_objecte = self.create_publisher(Odometry, '/objecte_detectat', 10)
-        self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
+        self.pub_tipus   = self.create_publisher(String, '/tipus_obstacle', 10)
+
+        self.en_maniobra = 0
+        self.objectes    = 0
+
+        # Debounce: evitar múltiples deteccions del mateix obstacle en escanades consecutives
+        self._cooldown = 0
+        self._COOLDOWN_MAX = 8
 
         self.get_logger().info('Node de Detecció actiu')
 
+    # ── Callbacks ──────────────────────────────────────────────────────────
+
     def odom_callback(self, msg):
-        #posició actual
         self.robot_x = msg.pose.pose.position.x
         self.robot_y = msg.pose.pose.position.y
-
-        #conversió a Yaw
         qx = msg.pose.pose.orientation.x
         qy = msg.pose.pose.orientation.y
         qz = msg.pose.pose.orientation.z
         qw = msg.pose.pose.orientation.w
-        siny_cosp = 2 * (qw * qz + qx * qy)
-        cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
+        siny_cosp = 2.0 * (qw * qz + qx * qy)
+        cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
         self.robot_ang = math.atan2(siny_cosp, cosy_cosp)
 
     def maniobra_callback(self, msg):
@@ -67,103 +57,88 @@ class DeteccioNode(Node):
     def comptador_callback(self, msg):
         self.objectes = msg.data
 
-    def classificar_obstacle(self, msg, distancia_min):
-        marge = 0.10
-
-        # Zona central estricta — on hauria d'estar un objecte petit
-        centre = list(msg.ranges[0:20]) + list(msg.ranges[340:360])
-        centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
-        propers_centre = [d for d in centre_valids if d < distancia_min + marge]
-
-        # Laterals a ~90°
-        lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
-        lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
-
-        # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
-        llindar_lateral = 0.5  # metres
-        esq_bloquejat = (
-            len(lateral_esq) > 0 and
-            sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.9
-        )
-        dre_bloquejat = (
-            len(lateral_dre) > 0 and
-            sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.9
-        )
-
-        # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte_petit = len(propers_centre) > 0 and len(propers_centre) < 40
-        lateral_bloquejat = esq_bloquejat or dre_bloquejat
-
-        if es_objecte_petit and not lateral_bloquejat:
-            return 'OBJECTE'
-        else:
-            return 'PARET'
-
     def laser_callback(self, msg):
-        # durant girs (en_maniobra==1) detecció completament desactivada
-        if self.en_maniobra == 1 or self.objectes >= 5:
+        if self.objectes >= 5:
             return
 
-        #con frontal
-        if self.en_maniobra == 2:
-            part_esquerra = msg.ranges[0:20]
-            part_dreta = msg.ranges[340:360]
-        else:
-            part_esquerra = msg.ranges[0:60]
-            part_dreta = msg.ranges[300:360]
+        # Durant girs (en_maniobra==1) detecció completament desactivada
+        # Durant rectes d'esquiva (en_maniobra==2) detecció activa amb llindar reduït
+        # Durant exploració (en_maniobra==0) detecció normal
+        if self.en_maniobra == 1:
+            return
 
-        con_frontal = list(part_esquerra) + list(part_dreta)
+        if self._cooldown > 0:
+            self._cooldown -= 1
+            return
 
-        #treure valors invàlids
-        distancies_valides = [d for d in con_frontal if msg.range_min < d < msg.range_max]
+        n = len(msg.ranges)
+        if n == 0:
+            return
 
-        if len(distancies_valides) > 0:
-            distancia_min = min(distancies_valides)
-            llindar = 0.20 if self.en_maniobra == 2 else 0.25
+        llindar = 0.15 if self.en_maniobra == 2 else 0.25
 
-            #si detectem un obstacle a prop
-            if distancia_min < llindar:
-                tipus = String()
-                tipus.data = self.classificar_obstacle(msg, distancia_min)
+        # CON AMPLIAT: ±90° en lloc de ±60°
+        # Permet detectar objectes que estaven "mig amagats" als laterals
+        # durant l'exploració i durant les rectes d'esquiva
+        graus_con = 90
+        idx_con   = int(graus_con * n / 360)
+        con = list(msg.ranges[:idx_con]) + list(msg.ranges[n - idx_con:])
 
-                if tipus.data == 'PARET':
-                    self.get_logger().info('PARET detectada')
-                else:
-                    num_min = msg.ranges.index(distancia_min)
-                    angle = msg.angle_min + (num_min * msg.angle_increment)
-                    self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
-                    self.enviar_posicio_objecte(distancia_min, angle)
+        distancies_valides = [d for d in con if msg.range_min < d < msg.range_max]
 
-                self.pub_tipus.publish(tipus)
+        if not distancies_valides:
+            return
 
-    def enviar_posicio_objecte(self, r, a):
-        #suma d'angle del robot + angle del laser
-        angle_final = self.robot_ang + a
+        distancia_min = min(distancies_valides)
 
-        obj_x = self.robot_x + (r * math.cos(angle_final))
-        obj_y = self.robot_y + (r * math.sin(angle_final))
+        if distancia_min < llindar:
+            marge   = 0.10
+            propers = [d for d in distancies_valides if d < distancia_min + marge]
+
+            tipus = String()
+            # Més de 60 punts propers → paret; menys → objecte petit
+            if len(propers) > 60:
+                tipus.data = 'PARET'
+                self.get_logger().info('PARET detectada')
+            else:
+                tipus.data = 'OBJECTE'
+                num_min = msg.ranges.index(distancia_min)
+                angle   = msg.angle_min + num_min * msg.angle_increment
+                self.get_logger().warn(
+                    f'Objecte detectat a {distancia_min:.2f}m, angle={math.degrees(angle):.1f}°'
+                )
+                self.enviar_posicio_objecte(distancia_min, angle)
+                self._cooldown = self._COOLDOWN_MAX
+
+            self.pub_tipus.publish(tipus)
+
+    def enviar_posicio_objecte(self, r, angle_laser):
+        angle_final = self.robot_ang + angle_laser
+        obj_x = self.robot_x + r * math.cos(angle_final)
+        obj_y = self.robot_y + r * math.sin(angle_final)
+
+        # Descartar posicions (0,0) — odometria no inicialitzada
+        if abs(obj_x) < 0.01 and abs(obj_y) < 0.01:
+            return
 
         msg_obj = Odometry()
-        msg_obj.header.stamp = self.get_clock().now().to_msg()
+        msg_obj.header.stamp    = self.get_clock().now().to_msg()
         msg_obj.header.frame_id = 'map'
         msg_obj.pose.pose.position.x = float(obj_x)
         msg_obj.pose.pose.position.y = float(obj_y)
-
         self.pub_objecte.publish(msg_obj)
+        self.get_logger().info(f'Posició objecte → X={obj_x:.2f}, Y={obj_y:.2f}')
 
 def main(args=None):
     rclpy.init(args=args)
     node = DeteccioNode()
-
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info('Aturant node...')
+        node.get_logger().info('Aturant node de detecció...')
     finally:
         node.destroy_node()
         rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
-
-#es llegeix la posició amb msg.pose.pose.position.x
