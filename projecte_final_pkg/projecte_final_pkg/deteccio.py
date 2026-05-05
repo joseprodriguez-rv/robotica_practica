@@ -74,8 +74,8 @@ class DeteccioNode(Node):
 
         #con frontal
         if self.en_maniobra == 2:
-            part_esquerra = msg.ranges[0:20]
-            part_dreta = msg.ranges[340:360]
+            part_esquerra = msg.ranges[0:40]
+            part_dreta = msg.ranges[320:360]
         else:
             part_esquerra = msg.ranges[0:60]
             part_dreta = msg.ranges[300:360]
