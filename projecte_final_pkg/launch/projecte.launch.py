@@ -20,14 +20,4 @@ def generate_launch_description():
             executable='cartograf_exe',
             name='cartograf'
         ),
-        RegisterEventHandler(
-            OnShutdown(on_shutdown=[
-                ExecuteProcess(
-                    cmd=['ros2', 'topic', 'pub', '--once', '/cmd_vel',
-                         'geometry_msgs/msg/TwistStamped',
-                         '{twist: {linear: {x: 0.0}, angular: {z: 0.0}}}'],
-                    output='screen'
-                )
-            ])
-        )
     ])
