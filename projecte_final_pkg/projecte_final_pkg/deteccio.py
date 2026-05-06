@@ -80,22 +80,27 @@ class DeteccioNode(Node):
         lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
 
         # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
-        llindar_lateral = 0.3  # metres
+        llindar_lateral = 0.5  # metres
         esq_bloquejat = (
+			len(propers_centre) > 20 and
             len(lateral_esq) > 0 and
-            sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.9
+            sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
         )
         dre_bloquejat = (
+        	len(propers_centre) > 20 and
             len(lateral_dre) > 0 and
-            sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.9
+            sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
         )
 
         # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte_petit = len(propers_centre) > 0 and len(propers_centre) < 40
-        lateral_bloquejat = esq_bloquejat or dre_bloquejat
-
-        if es_objecte_petit and not lateral_bloquejat:
-            return 'OBJECTE'
+        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
+        es_paret = (esq_bloquejat or dre_bloquejat) or len(propers_centre) == 40
+        self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
+        
+        if es_objecte and not es_paret:
+			return 'OBJECTE'
+		elif es_objecte or not es_paret:
+			return
         else:
             return 'PARET'
 
@@ -128,7 +133,7 @@ class DeteccioNode(Node):
 
                 if tipus.data == 'PARET':
                     self.get_logger().info('PARET detectada')
-                else:
+                elif tipus.data == 'OBJECTE':
                     num_min = msg.ranges.index(distancia_min)
                     angle = msg.angle_min + (num_min * msg.angle_increment)
                     self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
