@@ -80,7 +80,7 @@ class DeteccioNode(Node):
         lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
 
         # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
-        llindar_lateral = 0.5  # metres
+        llindar_lateral = 0.3  # metres
         esq_bloquejat = (
             len(lateral_esq) > 0 and
             sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.9
