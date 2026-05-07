@@ -71,7 +71,7 @@ class DeteccioNode(Node):
         marge = 0.10
 
         # Zona central estricta — on hauria d'estar un objecte petit
-        centre = list(msg.ranges[0:20]) + list(msg.ranges[340:360])
+        centre = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
 
@@ -82,12 +82,12 @@ class DeteccioNode(Node):
         # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
         llindar_lateral = 0.5  # metres
         esq_bloquejat = (
-            len(propers_centre) > 20 and
+            len(propers_centre) > 30 and
             len(lateral_esq) > 0 and
             sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
         )
         dre_bloquejat = (
-            len(propers_centre) > 20 and
+            len(propers_centre) > 30 and
             len(lateral_dre) > 0 and
             sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
         )
