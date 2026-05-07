@@ -82,12 +82,12 @@ class DeteccioNode(Node):
         # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
         llindar_lateral = 0.5  # metres
         esq_bloquejat = (
-			len(propers_centre) > 20 and
+            len(propers_centre) > 20 and
             len(lateral_esq) > 0 and
             sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
         )
         dre_bloquejat = (
-        	len(propers_centre) > 20 and
+            len(propers_centre) > 20 and
             len(lateral_dre) > 0 and
             sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
         )
@@ -98,9 +98,9 @@ class DeteccioNode(Node):
         self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
 
         if es_objecte and not es_paret:
-			return 'OBJECTE'
-		elif not es_objecte and es_paret:
-		    return 'PARET'
+            return 'OBJECTE'
+        elif not es_objecte and es_paret:
+            return 'PARET'
         else:
             return ''
 

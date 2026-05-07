@@ -52,7 +52,7 @@ class MovimentNode(Node):
         # Odometria per als girs
         self.angle_actual = 0.0     # yaw actual del robot
         self.angle_inici_gir = None # yaw quan va començar el gir
-        
+
         self.noms_estat = {
             None: 'FINAL - Objectiu complert',
             0: 'EXPLORAR en linia recta',
@@ -109,33 +109,49 @@ class MovimentNode(Node):
         return abs(diff)
 
     def calcular_costat_lliure(self):
-        """Decideix cap a quin costat hi ha més espai lliure - 180° frontals"""
-        if len(self.laser_ranges) >= 360:
-            dreta = self.laser_ranges[270:360]
-            esquerra = self.laser_ranges[0:90]
-            valors_validsdre = [d for d in dreta if 0.1 < d < 6]
-            valors_validsesq = [d for d in esquerra if 0.1 < d < 6]
-            num_dre = len(valors_validsdre)
-            num_esq = len(valors_validsesq)
-            if num_esq > num_dre:
-                return -1  # més espai a l'esquerra
-            else:
-                return 1   # més espai a la dreta
-        return 1  # per defecte
+        """
+        Mesura l'espai lliure com la SUMA de distàncies dels rajos. Un raig
+        curt -> obstacle a prop. Un raig llarg o que es perd a l'infinit ->
+        espai lliure. Els rajos més enllà de 6m es saturen a 6m (espai obert).
+
+        Retorna: 1 = dreta, -1 = esquerra
+        """
+        if len(self.laser_ranges) < 360:
+            return 1  # per defecte si no tenim lectura
+
+        dreta = self.laser_ranges[270:360]
+        esquerra = self.laser_ranges[0:90]
+
+        def suma_lliure(rajos):
+            total = 0.0
+            for d in rajos:
+                # Ignorar NaN i lectures massa properes (sensor invàlid)
+                if d is None or d != d or d < 0.1:
+                    continue
+                total += min(d, 6.0)
+            return total
+
+        suma_esq = suma_lliure(esquerra)
+        suma_dre = suma_lliure(dreta)
+
+        if suma_esq > suma_dre:
+            return -1  # més espai a l'esquerra
+        else:
+            return 1   # més espai a la dreta
 
     def comprovar_obstacle(self, estat_seguent):
         """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
         if self.tipus_obstacle == 'PARET':
             self.direccio_paret = self.calcular_costat_lliure()
-            self.get_logger().warn(f'PARET detectada -> Alineant amb paret i girant 45° cap a {
-                "l'ESQUERRA" if self.direccio_paret == 1 else "la DRETA"}')
+            self.get_logger().warn(f'PARET detectada -> Alineant amb paret i girant 60° cap a {
+                "l\'ESQUERRA" if self.direccio_paret == -1 else "la DRETA"}')
             self.tipus_obstacle = None
             self.estat = 1
             self.iniciar_gir()
         elif self.tipus_obstacle == 'OBJECTE':
             self.direccio_esquivar = self.calcular_costat_lliure()
             self.get_logger().warn(f'OBJECTE detectat -> Esquivant cap a {
-                "l'ESQUERRA" if self.direccio_esquivar == 1 else "la DRETA"}')
+                "l\'ESQUERRA" if self.direccio_esquivar == -1 else "la DRETA"}')
             self.tipus_obstacle = None
             self.estat = 10
             self.iniciar_gir()
