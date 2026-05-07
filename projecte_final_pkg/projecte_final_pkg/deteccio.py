@@ -93,7 +93,9 @@ class DeteccioNode(Node):
             return 'DIAGONAL'
 
         # A partir d'aquí, hi ha alguna cosa específicament al davant
-        centre_valids = frontal_valids
+        # centre_valids és independent de frontal_valids — mateixa zona però recalculada
+        centre = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
+        centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
         if len(centre_valids) == 0:
             return ''
 
@@ -130,11 +132,8 @@ class DeteccioNode(Node):
         if self.en_maniobra == 1 or self.objectes >= 5:
             return
 
-        #con frontal
-        part_esquerra = msg.ranges[0:60]
-        part_dreta = msg.ranges[300:360]
-
-        con_frontal = list(part_esquerra) + list(part_dreta)
+        # zona frontal estricta — mateixa que classificar_obstacle per evitar inconsistències
+        con_frontal = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
 
         #treure valors invàlids
         distancies_valides = [d for d in con_frontal if msg.range_min < d < msg.range_max]
