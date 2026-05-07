@@ -96,13 +96,13 @@ class DeteccioNode(Node):
         es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
         es_paret = (esq_bloquejat or dre_bloquejat) or len(propers_centre) == 40
         self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
-        
+
         if es_objecte and not es_paret:
 			return 'OBJECTE'
-		elif es_objecte or not es_paret:
-			return
+		elif not es_objecte and es_paret:
+		    return 'PARET'
         else:
-            return 'PARET'
+            return
 
     def laser_callback(self, msg):
         # durant girs (en_maniobra==1) detecció completament desactivada
