@@ -75,7 +75,7 @@ class DeteccioNode(Node):
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
         if len(centre_valids) == 0:
             return ''
-        
+
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
         proporcio_centre = len(propers_centre) / len(centre_valids)
 
@@ -84,21 +84,25 @@ class DeteccioNode(Node):
         lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
 
         # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
+        # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
         llindar_lateral = 0.5  # metres
         esq_bloquejat = (
-            len(propers_centre) > 30 and
             len(lateral_esq) > 0 and
             sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
         )
         dre_bloquejat = (
-            len(propers_centre) > 30 and
             len(lateral_dre) > 0 and
             sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
         )
-        
+
         # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
-        es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.7
+        es_objecte = (
+            len(propers_centre) > 0
+            and len(propers_centre) < 40
+            and not esq_bloquejat
+            and not dre_bloquejat
+        )
+        es_paret = proporcio_centre > 0.8
         self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
 
         if es_objecte and not es_paret:
