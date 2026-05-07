@@ -75,7 +75,7 @@ class DeteccioNode(Node):
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
         if len(centre_valids) == 0:
             return ''
-        
+
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
         proporcio_centre = len(propers_centre) / len(centre_valids)
 
@@ -95,8 +95,6 @@ class DeteccioNode(Node):
             len(lateral_dre) > 0 and
             sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
         )
-
-        proporcio_centre = len(propers_centre) / (len(centre_valids if len(centre_valids > 0 else 1))
 
         # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
         es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
