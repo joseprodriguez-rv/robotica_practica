@@ -68,63 +68,33 @@ class DeteccioNode(Node):
         self.objectes = msg.data
 
     def classificar_obstacle(self, msg, distancia_min):
-        marge = 0.10
+        # Con frontal ±60° (índexs 0..59 i 300..359)
+        con = list(range(0, 60)) + list(range(300, 360))
 
-        # Laterals a ~90°
-        lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
-        lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
+        # Punts vàlids dins del con que estiguin relativament a prop
+        llindar = distancia_min + 0.30
+        valids = [msg.ranges[i] for i in con
+                  if msg.range_min < msg.ranges[i] < llindar]
 
-        min_lateral_esq = min(lateral_esq) if lateral_esq else float('inf')
-        min_lateral_dre = min(lateral_dre) if lateral_dre else float('inf')
-        min_lateral = min(min_lateral_esq, min_lateral_dre)
-
-        # Frontal estricte
-        frontal = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
-        frontal_valids = [d for d in frontal if msg.range_min < d < msg.range_max]
-        min_frontal = min(frontal_valids) if frontal_valids else float('inf')
-
-        self.get_logger().info(
-            f'[CLASSIF] min_frontal={min_frontal:.2f}  min_lateral={min_lateral:.2f}'
-        )
-
-        # Si el frontal és comparable al lateral -> mateixa paret en diagonal -> DIAGONAL
-        if min_frontal > min_lateral - marge:
-            self.get_logger().info('[CLASSIF] -> paret en diagonal')
-            return 'DIAGONAL'
-
-        # A partir d'aquí, hi ha alguna cosa específicament al davant
-        # centre_valids és independent de frontal_valids — mateixa zona però recalculada
-        centre = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
-        centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
-        if len(centre_valids) == 0:
+        if len(valids) < 5:
             return ''
 
-        propers_centre = [d for d in centre_valids if d < distancia_min + marge]
-        proporcio_centre = len(propers_centre) / len(centre_valids)
+        # Mètriques: arc (nombre de punts propers) i variança de distàncies
+        arc = len(valids)
+        mean = sum(valids) / arc
+        var = sum((d - mean) ** 2 for d in valids) / arc
 
-        # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
-        llindar_lateral = 0.5  # metres
-        esq_bloquejat = (
-            len(propers_centre) > 30 and
-            len(lateral_esq) > 0 and
-            sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
-        )
-        dre_bloquejat = (
-            len(propers_centre) > 30 and
-            len(lateral_dre) > 0 and
-            sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
-        )
+        self.get_logger().info(
+            f'Arc={arc}  var={var:.4f}  mean={mean:.3f}  dmin={distancia_min:.3f}')
 
-        # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
-        es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.7
-        self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
-
-        if es_objecte and not es_paret:
-            return 'OBJECTE'
-        elif not es_objecte and es_paret:
+        # Paret: molts punts consecutius i distàncies uniformes (var baixa)
+        # Objecte: pocs punts O les vores s'allunyen ràpid (var alta)
+        if arc >= 40 and var < 0.008:
             return 'PARET'
+        elif arc < 25 or var > 0.015:
+            return 'OBJECTE'
         else:
+            # Zona ambigua: ignorar per evitar falsos positius
             return ''
 
     def laser_callback(self, msg):
@@ -132,8 +102,11 @@ class DeteccioNode(Node):
         if self.en_maniobra == 1 or self.objectes >= 5:
             return
 
-        # zona frontal estricta — mateixa que classificar_obstacle per evitar inconsistències
-        con_frontal = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
+        #con frontal
+        part_esquerra = msg.ranges[0:60]
+        part_dreta = msg.ranges[300:360]
+
+        con_frontal = list(part_esquerra) + list(part_dreta)
 
         #treure valors invàlids
         distancies_valides = [d for d in con_frontal if msg.range_min < d < msg.range_max]
@@ -155,9 +128,6 @@ class DeteccioNode(Node):
                     angle = msg.angle_min + (num_min * msg.angle_increment)
                     self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
                     self.enviar_posicio_objecte(distancia_min, angle)
-                    self.pub_tipus.publish(tipus)
-                elif tipus.data == 'DIAGONAL':
-                    self.get_logger().info('DIAGONAL detectada')
                     self.pub_tipus.publish(tipus)
                 else:
                     pass
