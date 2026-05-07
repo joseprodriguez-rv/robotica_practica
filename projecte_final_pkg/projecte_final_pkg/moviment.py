@@ -45,8 +45,8 @@ class MovimentNode(Node):
         self.cicles = 0
         self.objectes = 0
         self.tipus_obstacle = None
-        self.direccio_esquivar = 1  # 1=esquerra, -1=dreta (decidit pel laser)
-        self.direccio_paret = 1     # 1=esquerra, -1=dreta (decidit pel laser)
+        self.direccio_esquivar = -1  # +1=esquerra, -1=dreta (decidit pel laser)
+        self.direccio_paret = -1     # +1=esquerra, -1=dreta (decidit pel laser)
         self.laser_ranges = []      # última lectura del làser
 
         # Odometria per als girs
@@ -111,57 +111,49 @@ class MovimentNode(Node):
     def calcular_costat_lliure(self):
         """Decideix cap a quin costat hi ha més espai lliure - 180° frontals.
 
-        Mesura l'espai lliure com la SUMA de distàncies dels rajos. Un raig
-        curt -> obstacle a prop. Un raig llarg o que es perd a l'infinit ->
-        espai lliure. Els rajos més enllà de 6m es saturen a 6m (espai obert).
-
-        Retorna: 1 = dreta, -1 = esquerra
+        Convenció (alineada amb angular.z de ROS2):
+          +1 = esquerra (angular.z positiu = gir antihorari = esquerra)
+          -1 = dreta    (angular.z negatiu = gir horari    = dreta)
         """
-        dreta = self.laser_ranges[270:360]
-        esquerra = self.laser_ranges[0:90]
-        
-
-        def suma_lliure(rajos):
-            total = 0.0
-            for d in rajos:
-                # Ignorar NaN i lectures massa properes (sensor invàlid)
-                if d is None or d != d or d < 0.1:
-                    continue
-                total += min(d, 6.0)
-            return total
-
-        suma_esq = suma_lliure(esquerra)
-        suma_dre = suma_lliure(dreta)
-
-        if suma_esq > suma_dre:
-            decisio = 1
-            costat = 'ESQUERRA'
-        else:
-            decisio = -1
-            costat = 'DRETA'
-
-        # DEBUG temporal — verificar que la mètrica correspon a la realitat
-        self.get_logger().warn(
-            f'[LASER] suma_esq={suma_esq:.1f}m  suma_dre={suma_dre:.1f}m  '
-            f'-> decisio={decisio} ({costat})'
-        )
-        self.get_logger().warn(f'[LASER] N rajos = {len(self.laser_ranges)}')
-
-        return decisio
+        # DEBUG: log incondicional d'entrada (per saber si la funció s'executa)
+        self.get_logger().warn(f'[CALCULAR] entrant. len(laser_ranges)={len(self.laser_ranges)}')
+        if len(self.laser_ranges) >= 360:
+            dreta = self.laser_ranges[270:360]
+            esquerra = self.laser_ranges[0:90]
+            valors_validsdre = [d for d in dreta if 0.1 < d < 6]
+            valors_validsesq = [d for d in esquerra if 0.1 < d < 6]
+            num_dre = len(valors_validsdre)
+            num_esq = len(valors_validsesq)
+            self.get_logger().warn(
+                f'[CALCULAR] num_esq={num_esq}  num_dre={num_dre}  '
+                f'-> {"+1 (esquerra)" if num_esq > num_dre else "-1 (dreta)"}'
+            )
+            if num_esq > num_dre:
+                return 1   # més espai a l'esquerra -> anar a l'esquerra
+            else:
+                return -1  # més espai a la dreta -> anar a la dreta
+        self.get_logger().warn(f'[CALCULAR] retornant -1 per defecte (len < 360)')
+        return -1  # per defecte (dreta)
 
     def comprovar_obstacle(self, estat_seguent):
         """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
+        # DEBUG: traçar cada crida i la decisió que pren
+        self.get_logger().info(
+            f'[COMPROVAR] tipus_obstacle={self.tipus_obstacle!r}  '
+            f'estat_actual={self.estat}  estat_seguent={estat_seguent}  '
+            f'len(laser)={len(self.laser_ranges)}'
+        )
         if self.tipus_obstacle == 'PARET':
             self.direccio_paret = self.calcular_costat_lliure()
             self.get_logger().warn(f'PARET detectada -> Alineant amb paret i girant 45° cap a {
-                "l\'ESQUERRA" if self.direccio_paret == -1 else "la DRETA"}')
+                "l\'ESQUERRA" if self.direccio_paret == 1 else "la DRETA"}')
             self.tipus_obstacle = None
             self.estat = 1
             self.iniciar_gir()
         elif self.tipus_obstacle == 'OBJECTE':
             self.direccio_esquivar = self.calcular_costat_lliure()
             self.get_logger().warn(f'OBJECTE detectat -> Esquivant cap a {
-                "l\'ESQUERRA" if self.direccio_esquivar == -1 else "la DRETA"}')
+                "l\'ESQUERRA" if self.direccio_esquivar == 1 else "la DRETA"}')
             self.tipus_obstacle = None
             self.estat = 10
             self.iniciar_gir()
