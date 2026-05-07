@@ -43,7 +43,6 @@ class DeteccioNode(Node):
 
         #publisher objecte en odometria amb x i y
         self.pub_objecte = self.create_publisher(Odometry, '/objecte_detectat', 10)
-        self.pub_paret = self.create_publisher(Odometry, '/paret_detectada', 10)
         self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
 
         self.get_logger().info('Node de Detecció actiu')
@@ -69,42 +68,49 @@ class DeteccioNode(Node):
         self.objectes = msg.data
 
     def classificar_obstacle(self, msg, distancia_min):
-        marge = 0.10
+        # Llindars geomètrics:
+        # - Al centre (±20°), una paret a 0.25m fa que els rajos oblics arribin
+        #   fins a 0.25/cos(20°) ≈ 0.27m. Donem marge fins a 0.40m.
+        # - A l'anell (±20° a ±60°), una paret a 0.25m perpendicular fa que
+        #   els rajos arribin fins a 0.25/cos(60°) = 0.50m. Donem marge fins
+        #   a 0.60m.
+        # Si el centre té coses a prop però l'anell NO -> objecte petit centrat.
+        # Si tant el centre com l'anell tenen coses a prop -> paret (continua).
+        llindar_centre = 0.40
+        llindar_anell  = 0.60
 
-        centre = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
+        # Centre: ±20° (40 rajos)
+        centre = list(msg.ranges[0:20]) + list(msg.ranges[340:360])
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
-        if len(centre_valids) == 0:
-            return ''
+        propers_centre = [d for d in centre_valids if d < llindar_centre]
 
-        propers_centre = [d for d in centre_valids if d < distancia_min + marge]
-        proporcio_centre = len(propers_centre) / len(centre_valids)
+        # Anell: de ±20° a ±60° (80 rajos)
+        anell = list(msg.ranges[20:60]) + list(msg.ranges[300:340])
+        anell_valids = [d for d in anell if msg.range_min < d < msg.range_max]
+        propers_anell = [d for d in anell_valids if d < llindar_anell]
 
-        # Laterals a ~90°
-        lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
-        lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
+        # Proporcions (evitant divisions per zero)
+        prop_centre = len(propers_centre) / len(centre_valids) if centre_valids else 0.0
+        prop_anell  = len(propers_anell)  / len(anell_valids)  if anell_valids  else 0.0
 
-        # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
-        llindar_lateral = 0.5  # metres
-        esq_bloquejat = (
-            len(propers_centre) > 30 and
-            len(lateral_esq) > 0 and
-            sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
+        # Criteris mutuament excloents:
+        #   PARET   = el centre està mig ple I l'anell també està mig ple
+        #             (l'obstacle s'estén més enllà del con frontal)
+        #   OBJECTE = el centre té alguna cosa I l'anell està majoritàriament lliure
+        #             (l'obstacle es limita al davant)
+        #   ''      = qualsevol altre cas (ambigu, no actuem)
+        centre_ple = prop_centre > 0.50
+        anell_ple  = prop_anell  > 0.50
+
+        self.get_logger().info(
+            f'[CLASS] centre={len(propers_centre)}/{len(centre_valids)} ({prop_centre:.0%})  '
+            f'anell={len(propers_anell)}/{len(anell_valids)} ({prop_anell:.0%})'
         )
-        dre_bloquejat = (
-            len(propers_centre) > 30 and
-            len(lateral_dre) > 0 and
-            sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
-        )
 
-        # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
-        es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.7
-        self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
-
-        if es_objecte and not es_paret:
-            return 'OBJECTE'
-        elif not es_objecte and es_paret:
+        if centre_ple and anell_ple:
             return 'PARET'
+        elif centre_ple and not anell_ple:
+            return 'OBJECTE'
         else:
             return ''
 
@@ -114,8 +120,12 @@ class DeteccioNode(Node):
             return
 
         #con frontal
-        part_esquerra = msg.ranges[0:60]
-        part_dreta = msg.ranges[300:360]
+        if self.en_maniobra == 2:
+            part_esquerra = msg.ranges[0:20]
+            part_dreta = msg.ranges[340:360]
+        else:
+            part_esquerra = msg.ranges[0:60]
+            part_dreta = msg.ranges[300:360]
 
         con_frontal = list(part_esquerra) + list(part_dreta)
 
@@ -124,7 +134,7 @@ class DeteccioNode(Node):
 
         if len(distancies_valides) > 0:
             distancia_min = min(distancies_valides)
-            llindar = 0.25 if self.en_maniobra == 2 else 0.30
+            llindar = 0.20 if self.en_maniobra == 2 else 0.25
 
             #si detectem un obstacle a prop
             if distancia_min < llindar:
@@ -133,12 +143,7 @@ class DeteccioNode(Node):
 
                 if tipus.data == 'PARET':
                     self.get_logger().info('PARET detectada')
-                    # enviar posició exacta de la paret
-                    num_min = msg.ranges.index(distancia_min)
-                    angle = msg.angle_min + (num_min * msg.angle_increment)
-                    self.enviar_posicio_paret(distancia_min, angle)
                     self.pub_tipus.publish(tipus)
-
                 elif tipus.data == 'OBJECTE':
                     num_min = msg.ranges.index(distancia_min)
                     angle = msg.angle_min + (num_min * msg.angle_increment)
@@ -163,21 +168,6 @@ class DeteccioNode(Node):
 
         self.pub_objecte.publish(msg_obj)
 
-    # ho envia a cartograf
-    def enviar_posicio_paret(self, r, a):
-        angle_final = self.robot_ang + a
-
-        paret_x = self.robot_x + (r * math.cos(angle_final))
-        paret_y = self.robot_y + (r * math.sin(angle_final))
-
-        msg_paret = Odometry()
-        msg_paret.header.stamp = self.get_clock().now().to_msg()
-        msg_paret.header.frame_id = 'map'
-        msg_paret.pose.pose.position.x = float(paret_x)
-        msg_paret.pose.pose.position.y = float(paret_y)
-
-        self.pub_paret.publish(msg_paret)
-
 def main(args=None):
     rclpy.init(args=args)
     node = DeteccioNode()
@@ -192,3 +182,5 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+#es llegeix la posició amb msg.pose.pose.position.x

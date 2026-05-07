@@ -56,8 +56,7 @@ class MovimentNode(Node):
         self.noms_estat = {
             None: 'FINAL - Objectiu complert',
             0: 'EXPLORAR en linia recta',
-            1: 'PARET - Alineament 45',
-            2: 'PARET - Alineament 90',
+            1: 'PARET - Gir 150° cap al costat lliure',
             10: 'ESQUIVA - Gir 90 cap al costat lliure',
             11: 'ESQUIVA - Avancar lateral',
             12: 'ESQUIVA - GIr 90 cap al contrari',
@@ -92,7 +91,7 @@ class MovimentNode(Node):
 
     def tipus_callback(self, msg):
         # només actualitza si no estem girant
-        if self.estat not in (1, 2, 10, 12, 14, 16):
+        if self.estat not in (1, 10, 12, 14, 16):
             self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
     def iniciar_gir(self):
@@ -109,7 +108,13 @@ class MovimentNode(Node):
         return abs(diff)
 
     def calcular_costat_lliure(self):
-        """Decideix cap a quin costat hi ha més espai lliure - 180° frontals."""
+        """Decideix cap a quin costat hi ha més espai lliure - 180° frontals.
+
+        Convenció (alineada amb angular.z de ROS2):
+          +1 = esquerra (angular.z positiu = gir antihorari = esquerra)
+          -1 = dreta    (angular.z negatiu = gir horari    = dreta)
+        """
+        # DEBUG: log incondicional d'entrada (per saber si la funció s'executa)
         self.get_logger().warn(f'[CALCULAR] entrant. len(laser_ranges)={len(self.laser_ranges)}')
         if len(self.laser_ranges) >= 360:
             dreta = self.laser_ranges[270:360]
@@ -131,6 +136,7 @@ class MovimentNode(Node):
 
     def comprovar_obstacle(self, estat_seguent):
         """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
+        # DEBUG: traçar cada crida i la decisió que pren
         self.get_logger().info(
             f'[COMPROVAR] tipus_obstacle={self.tipus_obstacle!r}  '
             f'estat_actual={self.estat}  estat_seguent={estat_seguent}  '
@@ -165,7 +171,7 @@ class MovimentNode(Node):
 
         # Regla d'or: durant els girs detecció OFF, durant avanços detecció ON
         en_maniobra = Int32()
-        if self.estat in (1, 2, 10, 12, 14, 16):
+        if self.estat in (1, 10, 12, 14, 16):
             en_maniobra.data = 1   # girant -> detecció OFF
         elif self.estat in (11, 13, 15):
             en_maniobra.data = 2   # avançant en esquiva -> llindar reduït
@@ -190,20 +196,10 @@ class MovimentNode(Node):
                 cmd.twist.angular.z = 0.0
                 self.comprovar_obstacle(0)
 
-        #  MANIOBRA PARET - estat 1: alineament 60° cap al costat lliure
+        #  MANIOBRA PARET - estat 1: gir de 150° cap al costat lliure
         elif self.estat == 1:
-            if self.angle_girat() < math.pi / 3:  # 60°
+            if self.angle_girat() < 5 * math.pi / 6:  # 150°
                 cmd.twist.angular.z = 0.5 * self.direccio_paret
-            else:
-                # Alineament acabat -> girar 90° cap al costat lliure
-                self.direccio_paret = self.calcular_costat_lliure()
-                self.estat = 2
-                self.iniciar_gir()
-
-        #  MANIOBRA PARET - estat 2: gir 90° cap al costat lliure
-        elif self.estat == 2:
-            if self.angle_girat() < math.pi / 2:  # 90°
-                cmd.twist.angular.z = 0.5 * -self.direccio_paret
             else:
                 # Gir acabat -> comprovar si hi ha obstacle nou
                 self.comprovar_obstacle(0)
