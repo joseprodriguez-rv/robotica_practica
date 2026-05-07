@@ -73,7 +73,11 @@ class DeteccioNode(Node):
         # Zona central estricta — on hauria d'estar un objecte petit
         centre = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
+        if len(centre_valids) == 0:
+            return ''
+        
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
+        proporcio_centre = len(propers_centre) / len(centre_valids)
 
         # Laterals a ~90°
         lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
@@ -95,8 +99,8 @@ class DeteccioNode(Node):
         proporcio_centre = len(propers_centre) / (len(centre_valids if len(centre_valids > 0 else 1))
 
         # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40 and not es_paret
-        es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.85
+        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
+        es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.7
         self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
 
         if es_objecte and not es_paret:
