@@ -91,10 +91,12 @@ class DeteccioNode(Node):
             len(lateral_dre) > 0 and
             sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
         )
+        
+        proporcio_centre = len(propers_centre) / (len(centre_valids if len(centre_valids > 0 else 1))
 
         # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
-        es_paret = (esq_bloquejat or dre_bloquejat) or len(propers_centre) == 40
+        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40 and not es_paret
+        es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.85
         self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
 
         if es_objecte and not es_paret:
@@ -124,7 +126,7 @@ class DeteccioNode(Node):
 
         if len(distancies_valides) > 0:
             distancia_min = min(distancies_valides)
-            llindar = 0.20 if self.en_maniobra == 2 else 0.25
+            llindar = 0.30 if self.en_maniobra == 2 else 0.35
 
             #si detectem un obstacle a prop
             if distancia_min < llindar:
