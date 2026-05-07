@@ -70,24 +70,35 @@ class DeteccioNode(Node):
     def classificar_obstacle(self, msg, distancia_min):
         marge = 0.10
 
+        # Zona central estricta — on hauria d'estar un objecte petit
         centre = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
         if len(centre_valids) == 0:
             return ''
-
+        
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
+        proporcio_centre = len(propers_centre) / len(centre_valids)
 
-        es_objecte = 0 < len(propers_centre) < 40
-        es_paret = len(propers_centre) >= 40
-        self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
+        # Laterals a ~90°
+        lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
+        lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
 
-        if es_objecte:
-            return 'OBJECTE'
-        elif es_paret:
-            return 'PARET'
-        else:
-            return ''
-
+        # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
+        llindar_lateral = 0.5  # metres
+        esq_bloquejat = (
+            len(propers_centre) > 30 and
+            len(lateral_esq) > 0 and
+            sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
+        )
+        dre_bloquejat = (
+            len(propers_centre) > 30 and
+            len(lateral_dre) > 0 and
+            sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
+        )
+        
+        # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
+        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
+        es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.7
         self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
 
         if es_objecte and not es_paret:
