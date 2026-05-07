@@ -70,24 +70,52 @@ class DeteccioNode(Node):
     def classificar_obstacle(self, msg, distancia_min):
         marge = 0.10
 
-        centre = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
-        centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
+        # Laterals a ~90°
+        lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
+        lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
+
+        min_lateral_esq = min(lateral_esq) if lateral_esq else float('inf')
+        min_lateral_dre = min(lateral_dre) if lateral_dre else float('inf')
+        min_lateral = min(min_lateral_esq, min_lateral_dre)
+
+        # Frontal estricte
+        frontal = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
+        frontal_valids = [d for d in frontal if msg.range_min < d < msg.range_max]
+        min_frontal = min(frontal_valids) if frontal_valids else float('inf')
+
+        self.get_logger().info(
+            f'[CLASSIF] min_frontal={min_frontal:.2f}  min_lateral={min_lateral:.2f}'
+        )
+
+        # Si el frontal és comparable al lateral -> mateixa paret en diagonal -> DIAGONAL
+        if min_frontal > min_lateral - marge:
+            self.get_logger().info('[CLASSIF] -> paret en diagonal')
+            return 'DIAGONAL'
+
+        # A partir d'aquí, hi ha alguna cosa específicament al davant
+        centre_valids = frontal_valids
         if len(centre_valids) == 0:
             return ''
 
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
+        proporcio_centre = len(propers_centre) / len(centre_valids)
 
-        es_objecte = 0 < len(propers_centre) < 40
-        es_paret = len(propers_centre) >= 40
-        self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
+        # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
+        llindar_lateral = 0.5  # metres
+        esq_bloquejat = (
+            len(propers_centre) > 30 and
+            len(lateral_esq) > 0 and
+            sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
+        )
+        dre_bloquejat = (
+            len(propers_centre) > 30 and
+            len(lateral_dre) > 0 and
+            sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
+        )
 
-        if es_objecte:
-            return 'OBJECTE'
-        elif es_paret:
-            return 'PARET'
-        else:
-            return ''
-
+        # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
+        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
+        es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.7
         self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
 
         if es_objecte and not es_paret:
@@ -128,6 +156,9 @@ class DeteccioNode(Node):
                     angle = msg.angle_min + (num_min * msg.angle_increment)
                     self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
                     self.enviar_posicio_objecte(distancia_min, angle)
+                    self.pub_tipus.publish(tipus)
+                elif tipus.data == 'DIAGONAL':
+                    self.get_logger().info('DIAGONAL detectada')
                     self.pub_tipus.publish(tipus)
                 else:
                     pass

@@ -56,7 +56,8 @@ class MovimentNode(Node):
         self.noms_estat = {
             None: 'FINAL - Objectiu complert',
             0: 'EXPLORAR en linia recta',
-            1: 'PARET - Alineament 45',
+            1: 'PARET - Alineament 60',
+            20: 'PARET - DIAGONAL gir 90°',
             2: 'PARET - Alineament 90',
             10: 'ESQUIVA - Gir 90 cap al costat lliure',
             11: 'ESQUIVA - Avancar lateral',
@@ -92,8 +93,8 @@ class MovimentNode(Node):
 
     def tipus_callback(self, msg):
         # només actualitza si no estem girant
-        if self.estat not in (1, 2, 10, 12, 14, 16):
-            self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
+        if self.estat not in (1, 2, 10, 12, 14, 16, 20):
+            self.tipus_obstacle = msg.data  # 'PARET', 'OBJECTE', 'DIAGONAL'
 
     def iniciar_gir(self):
         """Guardar angle inicial quan comença un gir"""
@@ -145,10 +146,17 @@ class MovimentNode(Node):
         )
         if self.tipus_obstacle == 'PARET':
             self.direccio_paret = self.calcular_costat_lliure()
-            self.get_logger().warn(f'PARET detectada -> Alineant amb paret i girant 45° cap a {
+            self.get_logger().warn(f'PARET detectada -> Alineant amb paret i girant 60° cap a {
                 "l\'ESQUERRA" if self.direccio_paret == 1 else "la DRETA"}')
             self.tipus_obstacle = None
             self.estat = 1
+            self.iniciar_gir()
+        elif self.tipus_obstacle == 'DIAGONAL':
+            self.direccio_paret = self.calcular_costat_lliure()
+            self.get_logger().warn(f'DIAGONAL detectada -> gir 90° directe cap a {
+                "l\'ESQUERRA" if self.direccio_paret == 1 else "la DRETA"}')
+            self.tipus_obstacle = None
+            self.estat = 2
             self.iniciar_gir()
         elif self.tipus_obstacle == 'OBJECTE':
             self.direccio_esquivar = self.calcular_costat_lliure()
@@ -207,6 +215,7 @@ class MovimentNode(Node):
                 self.direccio_paret = self.calcular_costat_lliure()
                 self.estat = 2
                 self.iniciar_gir()
+                self.direccio_paret = -self.direccio_paret # Després d'haver girat
 
         #  MANIOBRA PARET - estat 2: gir 90° cap al costat lliure
         elif self.estat == 2:
