@@ -75,7 +75,7 @@ class DeteccioNode(Node):
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
         if len(centre_valids) == 0:
             return ''
-
+        
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
         proporcio_centre = len(propers_centre) / len(centre_valids)
 
@@ -95,7 +95,7 @@ class DeteccioNode(Node):
             len(lateral_dre) > 0 and
             sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
         )
-
+        
         # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
         es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
         es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.7
@@ -114,12 +114,8 @@ class DeteccioNode(Node):
             return
 
         #con frontal
-        if self.en_maniobra == 2:
-            part_esquerra = msg.ranges[0:20]
-            part_dreta = msg.ranges[340:360]
-        else:
-            part_esquerra = msg.ranges[0:60]
-            part_dreta = msg.ranges[300:360]
+        part_esquerra = msg.ranges[0:60]
+        part_dreta = msg.ranges[300:360]
 
         con_frontal = list(part_esquerra) + list(part_dreta)
 
@@ -128,7 +124,7 @@ class DeteccioNode(Node):
 
         if len(distancies_valides) > 0:
             distancia_min = min(distancies_valides)
-            llindar = 0.20 if self.en_maniobra == 2 else 0.25
+            llindar = 0.25 if self.en_maniobra == 2 else 0.30
 
             #si detectem un obstacle a prop
             if distancia_min < llindar:
