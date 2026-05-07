@@ -109,7 +109,8 @@ class MovimentNode(Node):
         return abs(diff)
 
     def calcular_costat_lliure(self):
-        """
+        """Decideix cap a quin costat hi ha més espai lliure - 180° frontals.
+
         Mesura l'espai lliure com la SUMA de distàncies dels rajos. Un raig
         curt -> obstacle a prop. Un raig llarg o que es perd a l'infinit ->
         espai lliure. Els rajos més enllà de 6m es saturen a 6m (espai obert).
@@ -135,15 +136,25 @@ class MovimentNode(Node):
         suma_dre = suma_lliure(dreta)
 
         if suma_esq > suma_dre:
-            return -1  # més espai a l'esquerra
+            decisio = -1
+            costat = 'ESQUERRA'
         else:
-            return 1   # més espai a la dreta
+            decisio = 1
+            costat = 'DRETA'
+
+        # DEBUG temporal — verificar que la mètrica correspon a la realitat
+        self.get_logger().info(
+            f'[LASER] suma_esq={suma_esq:.1f}m  suma_dre={suma_dre:.1f}m  '
+            f'-> decisio={decisio} ({costat})'
+        )
+
+        return decisio
 
     def comprovar_obstacle(self, estat_seguent):
         """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
         if self.tipus_obstacle == 'PARET':
             self.direccio_paret = self.calcular_costat_lliure()
-            self.get_logger().warn(f'PARET detectada -> Alineant amb paret i girant 60° cap a {
+            self.get_logger().warn(f'PARET detectada -> Alineant amb paret i girant 45° cap a {
                 "l\'ESQUERRA" if self.direccio_paret == -1 else "la DRETA"}')
             self.tipus_obstacle = None
             self.estat = 1
