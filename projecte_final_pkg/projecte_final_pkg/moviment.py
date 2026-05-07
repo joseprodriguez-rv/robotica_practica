@@ -109,13 +109,7 @@ class MovimentNode(Node):
         return abs(diff)
 
     def calcular_costat_lliure(self):
-        """Decideix cap a quin costat hi ha més espai lliure - 180° frontals.
-
-        Convenció (alineada amb angular.z de ROS2):
-          +1 = esquerra (angular.z positiu = gir antihorari = esquerra)
-          -1 = dreta    (angular.z negatiu = gir horari    = dreta)
-        """
-        # DEBUG: log incondicional d'entrada (per saber si la funció s'executa)
+        """Decideix cap a quin costat hi ha més espai lliure - 180° frontals."""
         self.get_logger().warn(f'[CALCULAR] entrant. len(laser_ranges)={len(self.laser_ranges)}')
         if len(self.laser_ranges) >= 360:
             dreta = self.laser_ranges[270:360]
@@ -137,7 +131,6 @@ class MovimentNode(Node):
 
     def comprovar_obstacle(self, estat_seguent):
         """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
-        # DEBUG: traçar cada crida i la decisió que pren
         self.get_logger().info(
             f'[COMPROVAR] tipus_obstacle={self.tipus_obstacle!r}  '
             f'estat_actual={self.estat}  estat_seguent={estat_seguent}  '
@@ -203,7 +196,6 @@ class MovimentNode(Node):
                 cmd.twist.angular.z = 0.5 * self.direccio_paret
             else:
                 # Alineament acabat -> girar 90° cap al costat lliure
-                # No volem que comprovi si PARET o OBJECTE perquè ja ho sabem
                 self.direccio_paret = self.calcular_costat_lliure()
                 self.estat = 2
                 self.iniciar_gir()
