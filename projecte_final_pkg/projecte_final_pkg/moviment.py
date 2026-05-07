@@ -117,11 +117,9 @@ class MovimentNode(Node):
 
         Retorna: 1 = dreta, -1 = esquerra
         """
-        if len(self.laser_ranges) < 360:
-            return 1  # per defecte si no tenim lectura
-
         dreta = self.laser_ranges[270:360]
         esquerra = self.laser_ranges[0:90]
+        
 
         def suma_lliure(rajos):
             total = 0.0
@@ -136,17 +134,18 @@ class MovimentNode(Node):
         suma_dre = suma_lliure(dreta)
 
         if suma_esq > suma_dre:
-            decisio = -1
+            decisio = 1
             costat = 'ESQUERRA'
         else:
-            decisio = 1
+            decisio = -1
             costat = 'DRETA'
 
         # DEBUG temporal — verificar que la mètrica correspon a la realitat
-        self.get_logger().info(
+        self.get_logger().warn(
             f'[LASER] suma_esq={suma_esq:.1f}m  suma_dre={suma_dre:.1f}m  '
             f'-> decisio={decisio} ({costat})'
         )
+        self.get_logger().warn(f'[LASER] N rajos = {len(self.laser_ranges)}')
 
         return decisio
 
