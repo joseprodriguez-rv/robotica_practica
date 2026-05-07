@@ -70,39 +70,24 @@ class DeteccioNode(Node):
     def classificar_obstacle(self, msg, distancia_min):
         marge = 0.10
 
-        # Zona central estricta — on hauria d'estar un objecte petit
         centre = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
         if len(centre_valids) == 0:
             return ''
 
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
-        proporcio_centre = len(propers_centre) / len(centre_valids)
 
-        # Laterals a ~90°
-        lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
-        lateral_dre = [d for d in msg.ranges[270:300] if msg.range_min < d < msg.range_max]
+        es_objecte = 0 < len(propers_centre) < 40
+        es_paret = len(propers_centre) >= 40
+        self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
 
-        # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
-        # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
-        llindar_lateral = 0.5  # metres
-        esq_bloquejat = (
-            len(lateral_esq) > 0 and
-            sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
-        )
-        dre_bloquejat = (
-            len(lateral_dre) > 0 and
-            sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
-        )
+        if es_objecte:
+            return 'OBJECTE'
+        elif es_paret:
+            return 'PARET'
+        else:
+            return ''
 
-        # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte = (
-            len(propers_centre) > 0
-            and len(propers_centre) < 40
-            and not esq_bloquejat
-            and not dre_bloquejat
-        )
-        es_paret = proporcio_centre > 0.8
         self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
 
         if es_objecte and not es_paret:
