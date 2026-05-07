@@ -102,7 +102,7 @@ class DeteccioNode(Node):
 		elif not es_objecte and es_paret:
 		    return 'PARET'
         else:
-            return
+            return ''
 
     def laser_callback(self, msg):
         # durant girs (en_maniobra==1) detecció completament desactivada
@@ -133,13 +133,15 @@ class DeteccioNode(Node):
 
                 if tipus.data == 'PARET':
                     self.get_logger().info('PARET detectada')
+                    self.pub_tipus.publish(tipus)
                 elif tipus.data == 'OBJECTE':
                     num_min = msg.ranges.index(distancia_min)
                     angle = msg.angle_min + (num_min * msg.angle_increment)
                     self.get_logger().warn(f'Objecte detectat a {distancia_min:.2f}m')
                     self.enviar_posicio_objecte(distancia_min, angle)
-
-                self.pub_tipus.publish(tipus)
+                    self.pub_tipus.publish(tipus)
+                else:
+                    pass
 
     def enviar_posicio_objecte(self, r, a):
         #suma d'angle del robot + angle del laser
