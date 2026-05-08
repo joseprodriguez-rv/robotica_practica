@@ -4,7 +4,7 @@
 
 Sistema d'exploració autònoma amb ROS2 Jazzy per a TurtleBot3 Burger.
 El robot explora lliurement. Quan troba un obstacle, decideix quin costat té més espai
-lliure per girar. Registra les coordenades dels obstacles trobats
+lliure per girar. Registra les coordenades dels obstacles trobats.
 
 ---
 
@@ -67,7 +67,7 @@ Llegeix el làser i l'odometria. Classifica obstacles i publica la seva posició
 **Topics publicats:**
 
 - `/tipus_obstacle` - `'PARET'` o `'OBJECTE'`
-- `/objecte_detectat` - posició de l'objecte en coordenades del mapa
+- `/objecte_detectat` - posició de l'objecte en coordenades del mapa (missatge `Odometry`)
 
 ---
 
@@ -98,7 +98,7 @@ Controla el moviment del robot. Gestiona l'exploració, la maniobra de paret i l
 
 **Topics publicats:**
 
-- `/cmd_vel` - velocitat del robot
+- `/cmd_vel` - velocitat del robot (`TwistStamped`)
 - `/en_maniobra` - flag per pausar detecció durant girs
 
 ---
@@ -135,7 +135,7 @@ graph TD
 | Estat  | Descripció                                       | Detecció activa |
 | ------ | ------------------------------------------------ | --------------- |
 | `0`    | Explorar en línia recta                          | ✅              |
-| `1`    | Maniobra paret - girar 45° cap al costat lliure  | ✅              |
+| `1`    | Maniobra paret - gir 150° cap al costat lliure   | ❌              |
 | `None` | Objectiu complert - robot aturat                 | ❌              |
 | `10`   | Esquiva objecte - gir 90° cap al costat lliure   | ❌              |
 | `11`   | Esquiva objecte - avançar lateral                | ✅              |
@@ -149,15 +149,34 @@ graph TD
 
 ## Paràmetres ajustables
 
-| Fitxer         | Paràmetre                      | Valor actual | Descripció                        |
-| -------------- | ------------------------------ | ------------ | --------------------------------- |
-| `deteccio.py`  | `distancia_min < 0.4`          | `0.4m`       | Distància de detecció d'obstacle  |
-| `deteccio.py`  | `len(distancies_valides) > 90` | `90 punts`   | Llindar paret vs objecte          |
-| `cartograf.py` | `radi_proximitat`              | `0.35m`      | Radi per filtrar duplicats        |
-| `moviment.py`  | `math.pi / 4`                  | `45°`        | Angle de maniobra de paret        |
-| `moviment.py`  | `math.pi / 2`                  | `90°`        | Angle d'esquiva d'objecte         |
-| `moviment.py`  | `cicles < 12`                  | `1.2s`       | Temps d'avanç lateral esquiva     |
-| `moviment.py`  | `cicles < 25`                  | `2.5s`       | Temps d'avanç per superar objecte |
+| Fitxer         | Paràmetre             | Valor actual | Descripció                                             |
+| -------------- | --------------------- | ------------ | ------------------------------------------------------ |
+| `deteccio.py`  | `llindar` (explorant) | `0.25m`      | Distància de detecció en exploració (`en_maniobra==0`) |
+| `deteccio.py`  | `llindar` (esquiva)   | `0.20m`      | Distància de detecció en esquiva (`en_maniobra==2`)    |
+| `deteccio.py`  | `llindar_centre`      | `0.40m`      | Llindar zona central ±20° per classificar              |
+| `deteccio.py`  | `llindar_anell`       | `0.60m`      | Llindar zona anell ±20°–±60° per classificar           |
+| `cartograf.py` | `radi_proximitat`     | `0.35m`      | Radi per filtrar duplicats                             |
+| `moviment.py`  | `5 * math.pi / 6`     | `150°`       | Angle de maniobra de paret (estat 1)                   |
+| `moviment.py`  | `math.pi / 2`         | `90°`        | Angle d'esquiva d'objecte                              |
+| `moviment.py`  | `cicles < 12`         | `1.2s`       | Temps d'avanç lateral esquiva (estats 11 i 15)         |
+| `moviment.py`  | `cicles < 25`         | `2.5s`       | Temps d'avanç per superar objecte (estat 13)           |
+
+---
+
+## Lògica de classificació d'obstacles (`deteccio.py`)
+
+La classificació es fa sobre el con frontal (±60° explorant, ±20° en esquiva). S'analitzen dues zones angulars:
+
+- **Centre** (`ranges[0:20]` + `ranges[340:360]`, ±20°): llindar `0.40m`. Raonament geomètric: una paret a `0.25m` perpendicular fa que els rajos oblics arribin fins a `0.25/cos(20°) ≈ 0.27m`; es dona marge fins a `0.40m`.
+- **Anell** (`ranges[20:60]` + `ranges[300:340]`, ±20°–±60°): llindar `0.60m`. Una paret a `0.25m` perpendicular fa que els rajos a 60° arribin fins a `0.25/cos(60°) = 0.50m`; es dona marge fins a `0.60m`.
+
+Criteris (sobre la proporció de punts vàlids per sota del llindar):
+
+| Condició                 | Classificació |
+| ------------------------ | ------------- |
+| centre >50% i anell >50% | `PARET`       |
+| centre >50% i anell ≤50% | `OBJECTE`     |
+| qualsevol altre cas      | _(res)_       |
 
 ---
 
@@ -167,9 +186,9 @@ Molts comentaris han sigut netejats.
 
 ### `deteccio.py`
 
-- **Distància de detecció** augmentada de `0.25m` a `0.4m` - detecta obstacles abans
-- **Llindar paret/objecte** mantingut a `> 90 punts` - objectes petits retornen molt pocs punts
-- **`en_maniobra`** pausa la detecció durant els girs (estats 10, 12, 14, 16) però no durant els avanços (11, 13, 15) - permet detectar nous obstacles mentre avança
+- **Distància de detecció** `0.25m` en exploració i `0.20m` en esquiva (con reduït a ±20°) - evita reaccions prematures
+- **Classificació per zones** substitueix el llindar de `> 90 punts`: zona centre (±20°, `llindar_centre = 0.40m`) i zona anell (±20°–±60°, `llindar_anell = 0.60m`). PARET si ambdues zones superen el 50%; OBJECTE si només ho fa el centre. Els llindars es justifiquen geomètricament (veure secció anterior)
+- **`en_maniobra`** té 3 valors: `0` (explorant, con ±60°, llindar `0.25m`), `1` (girant, detecció OFF), `2` (avançant en esquiva, con reduït a ±20°, llindar `0.20m`)
 
 ### `cartograf.py`
 
@@ -177,12 +196,12 @@ Molts comentaris han sigut netejats.
 
 ### `moviment.py`
 
-- **Odometria per als girs** - afegida subscripció a `/odom` i funcions `iniciar_gir()` i `angle_girat()`. Els girs ara s'aturen quan es mesura l'angle real, no per cicles fixos
-- **Maniobra paret simplificada** - un sol gir de 45° cap al costat lliure (estat 1)
-- **Llindar incrementat** - aprofitant que `moviment.py` també llegeix de `/scan`, augmentar el rang a 180°, només quan ha de fer una decisió; no per detectar nous objectes.
-- **Costat lliure automàtic** - nova funció `calcular_costat_lliure()` que compta els raigs vàlids a esquerra i dreta del làser i tria el costat amb més espai. S'usa tant per paret com per objecte
+- **Odometria per als girs** - afegida subscripció a `/odom` i funcions `iniciar_gir()` i `angle_girat()`. Els girs s'aturen quan es mesura l'angle real, no per cicles fixos
+- **Maniobra paret** - un sol gir de 150° cap al costat lliure (estat 1)
+- **`calcular_costat_lliure()`** - compta els raigs vàlids als 90° esquerra (`ranges[0:90]`) i dreta (`ranges[270:360]`) i tria el costat amb més espai. S'usa tant per paret com per objecte
 - **Lògica dreta/esquerra corregida** - la versió original girava cap al costat incorrecte
-- **`en_maniobra`** publicat com `True` durant girs (10, 12, 14, 16) i `False` durant avanços (11, 13, 15)
+- **`en_maniobra`** publicat com `1` durant girs (1, 10, 12, 14, 16), `2` durant avanços d'esquiva (11, 13, 15) i `0` en exploració
+- **`TwistStamped`** en lloc de `Twist` per a `/cmd_vel`
 
 ---
 
@@ -190,4 +209,4 @@ Molts comentaris han sigut netejats.
 
 - **Girs de 90°** - cal verificar que l'odometria és prou precisa al robot real. Si no gira exactament 90°, ajustar la velocitat angular (`0.5 rad/s`) o revisar la calibració de l'odometria.
 - **Objectes molt propers entre si** - si dos objectes estan a menys de `0.35m`, el filtre de `radi_proximitat` pot confondre'ls com un de sol. Reduir el radi si cal.
-- **Parets en diagonal** - la maniobra de 45° pot no ser suficient. Ajustar l'angle si cal.
+- **Parets en diagonal** - si la paret es troba en un angle agut/obtús, és molt probable que sigui detectada com un objecte.
