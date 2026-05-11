@@ -77,9 +77,8 @@ class DeteccioNode(Node):
             return ''
 
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
-        proporcio_centre = len(propers_centre) / len(centre_valids)
 
-        delta_dist = 0
+        delta_dist = 0 # Diferència entre el primer i el últim
         if len(propers_centre) > 1:
             delta_dist = abs(propers_centre - propers_centre[-1])
 
@@ -98,17 +97,16 @@ class DeteccioNode(Node):
             sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
         )
 
-
         # Una PARET és: proporció alta O laterals bloquejats O pendent diagonal (delta_dist > 0.10
-        es_paret = (proporcio_centre > 0.7) or esq_bloquejat or dre_bloquejat or (delta_dist > 0.10)
-        # Es OBJECTE només entre 8 i 40 rajos I que NO s'hagi marcat com a paret
-        es_objecte = (8 < len(propers_centre) < 40) and not es_paret
+        es_paret = (len(propers_centre) > 40) or esq_bloquejat or dre_bloquejat or (delta_dist > 0.10)
+        # Es OBJECTE només entre 8 i 40 rajos
+        es_objecte = (8 <= len(propers_centre) <= 40)
         self.get_logger().info(f'N: {len(propers_centre)}, Delta: {delta_dist:.2f}, Obj: {es_objecte}, Paret: {es_paret}'
 
-        if es_objecte:
-            return 'OBJECTE'
-        elif es_paret:
+        if es_paret:
             return 'PARET'
+        elif es_objecte:
+            return 'OBJECTE'
         else:
             return ''
 
