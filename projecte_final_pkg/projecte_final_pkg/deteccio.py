@@ -68,16 +68,20 @@ class DeteccioNode(Node):
         self.objectes = msg.data
 
     def classificar_obstacle(self, msg, distancia_min):
-        marge = 0.10
+        marge = 0.05
 
-        # Zona central estricta — on hauria d'estar un objecte petit
+        # Zona central estricta
         centre = list(msg.ranges[0:30]) + list(msg.ranges[330:360])
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
         if len(centre_valids) == 0:
             return ''
-        
+
         propers_centre = [d for d in centre_valids if d < distancia_min + marge]
         proporcio_centre = len(propers_centre) / len(centre_valids)
+
+        delta_dist = 0
+        if len(propers_centre) > 1:
+            delta_dist = abs(propers_centre - propers_centre[-1])
 
         # Laterals a ~90°
         lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
@@ -86,24 +90,24 @@ class DeteccioNode(Node):
         # Un lateral bloquejat = majoria de punts per sota d'un llindar proper
         llindar_lateral = 0.5  # metres
         esq_bloquejat = (
-            len(propers_centre) > 30 and
             len(lateral_esq) > 0 and
             sum(1 for d in lateral_esq if d < llindar_lateral) / len(lateral_esq) > 0.95
         )
         dre_bloquejat = (
-            len(propers_centre) > 30 and
             len(lateral_dre) > 0 and
             sum(1 for d in lateral_dre if d < llindar_lateral) / len(lateral_dre) > 0.95
         )
-        
-        # Es OBJECTE només si està concentrat al centre I els laterals estan lliures
-        es_objecte = len(propers_centre) > 0 and len(propers_centre) < 40
-        es_paret = (esq_bloquejat or dre_bloquejat) or proporcio_centre > 0.7
-        self.get_logger().info(f'És objecte: {es_objecte}. És paret: {es_paret}')
 
-        if es_objecte and not es_paret:
+
+        # Una PARET és: proporció alta O laterals bloquejats O pendent diagonal (delta_dist > 0.10
+        es_paret = (proporcio_centre > 0.7) or esq_bloquejat or dre_bloquejat or (delta_dist > 0.10)
+        # Es OBJECTE només entre 8 i 40 rajos I que NO s'hagi marcat com a paret
+        es_objecte = (8 < len(propers_centre) < 40) and not es_paret
+        self.get_logger().info(f'N: {len(propers_centre)}, Delta: {delta_dist:.2f}, Obj: {es_objecte}, Paret: {es_paret}'
+
+        if es_objecte:
             return 'OBJECTE'
-        elif not es_objecte and es_paret:
+        elif es_paret:
             return 'PARET'
         else:
             return ''
