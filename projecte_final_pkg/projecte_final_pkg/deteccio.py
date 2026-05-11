@@ -81,7 +81,7 @@ class DeteccioNode(Node):
 
         delta_dist = 0 # Diferència entre el primer i el últim
         if len(propers_centre) > 1:
-            delta_dist = abs(propers_centre - propers_centre[-1])
+            delta_dist = abs(max(propers_centre) - min(propers_centre))
 
         # Laterals a ~90°
         lateral_esq = [d for d in msg.ranges[60:90] if msg.range_min < d < msg.range_max]
