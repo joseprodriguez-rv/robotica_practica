@@ -102,7 +102,7 @@ class DeteccioNode(Node):
         es_paret = (proporcio_centre > 0.7) or esq_bloquejat or dre_bloquejat or (delta_dist > 0.10)
         # Es OBJECTE només entre 8 i 40 rajos
         es_objecte = (8 <= len(propers_centre) <= 40)
-        self.get_logger().info(f'N: {len(propers_centre)}, Delta: {delta_dist:.2f}, Obj: {es_objecte}, Paret: {es_paret}'
+        self.get_logger().info(f'N: {len(propers_centre)}, Delta: {delta_dist:.2f}, Obj: {es_objecte}, Paret: {es_paret}')
 
         if es_paret:
             return 'PARET'
