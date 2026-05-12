@@ -109,7 +109,7 @@ class DeteccioNode(Node):
 
         if centre_ple and anell_ple:
             return 'PARET'
-        elif (centre_ple and not anell_ple) or (anell_ple and not centre_ple):
+        elif (prop_centre > 0.25 and not anell_ple) or (anell_ple and not prop_centre > 0.25):
             return 'OBJECTE'
         else:
             return ''
