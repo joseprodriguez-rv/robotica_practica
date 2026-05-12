@@ -67,6 +67,7 @@ class MovimentNode(Node):
             }
 
     def log_estat(self):
+        """Cada vegada que rebem un canvi, registrem l'estat"""
         if self.estat != self.estat_loguejat:
             nom = self.noms_estat.get(self.estat, f'DESCONEGUT ({self.estat})')
             self.get_logger().info(f'[ESTAT {self.estat}] {nom}')
