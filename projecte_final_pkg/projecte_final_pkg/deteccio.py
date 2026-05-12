@@ -31,7 +31,7 @@ class DeteccioNode(Node):
         self.sub_odom = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10)
 
-        #subscripció a maniobra — 0=explorant, 1=girant (OFF), 2=esquiva activa (llindar reduït)
+        #subscripció a maniobra 0=explorant, 1=girant (no detecta), 2=esquiva activat (llindar reduït)
         self.en_maniobra = 0
         self.sub_maniobra = self.create_subscription(
             Int32, '/en_maniobra', self.maniobra_callback, 10)
@@ -41,10 +41,11 @@ class DeteccioNode(Node):
         self.sub_comptador = self.create_subscription(
             Int32, '/comptador_objectes', self.comptador_callback, 10)
 
-        #publisher objecte en odometria amb x i y
+        #publisher objecte en odometria amb x i y (coords)
         self.pub_objecte = self.create_publisher(Odometry, '/objecte_detectat', 10)
         self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
-
+		
+		#per avisar per la terminal 
         self.get_logger().info('Node de detecció actiu...')
 
     def odom_callback(self, msg):
@@ -68,54 +69,46 @@ class DeteccioNode(Node):
         self.objectes = msg.data
 
     def classificar_obstacle(self, msg, distancia_min):
-        # Llindars geomètrics:
-        # - Al centre (±20°), una paret a 0.25m fa que els rajos oblics arribin
-        #   fins a 0.25/cos(20°) ≈ 0.27m. Donem marge fins a 0.40m.
-        # - A l'anell (±20° a ±60°), una paret a 0.25m perpendicular fa que
-        #   els rajos arribin fins a 0.25/cos(60°) = 0.50m. Donem marge fins
-        #   a 0.60m.
-        # Si el centre té coses a prop però l'anell NO -> objecte petit centrat.
-        # Si tant el centre com l'anell tenen coses a prop -> paret (continua).
+        #marges per distingir entre paret i objecte 
         llindar_centre = 0.40
         llindar_anell = 0.60
 
-        # Centre: ±20° (40 rajos)
+        #+-20º (40 rajos)
+        #com havíem fet en una tasca anterior
         centre = list(msg.ranges[0:20]) + list(msg.ranges[340:360])
         centre_valids = [d for d in centre if msg.range_min < d < msg.range_max]
         propers_centre = [d for d in centre_valids if d < llindar_centre]
 
-        # Anell: de ±20° a ±60° (80 rajos)
+        #anell (de 20º a 60º, 80 rajos)
         anell = list(msg.ranges[20:60]) + list(msg.ranges[300:340])
         anell_valids = [d for d in anell if msg.range_min < d < msg.range_max]
         propers_anell = [d for d in anell_valids if d < llindar_anell]
 
-        # Proporcions (evitant divisions per zero)
+        #les proporcions 
         prop_centre = len(propers_centre) / len(centre_valids) if centre_valids else 0.0
         prop_anell = len(propers_anell) / len(anell_valids) if anell_valids else 0.0
 
-        # Criteris mutuament excloents:
-        #   PARET   = el centre està mig ple I l'anell també està mig ple
-        #             (l'obstacle s'estén més enllà del con frontal)
-        #   OBJECTE = el centre té alguna cosa I l'anell està majoritàriament lliure
-        #             (l'obstacle es limita al davant)
-        #   ''      = qualsevol altre cas (ambigu, no actuem)
+
         centre_ple = prop_centre > 0.40
         anell_ple = prop_anell > 0.40
-
+		
+		#per la terminal
         self.get_logger().info(
             f'[CLASS] centre={len(propers_centre)}/{len(centre_valids)} ({prop_centre:.0%})  '
             f'anell={len(propers_anell)}/{len(anell_valids)} ({prop_anell:.0%})'
         )
-
+		#obstacle ocupa el con frontal
         if centre_ple and anell_ple:
             return 'PARET'
+        #anell bastant lliure, però tenim alguna cosa al centre
         elif (prop_centre > 0.25 and not anell_ple) or (anell_ple and not prop_centre > 0.25):
             return 'OBJECTE'
+		#no ens decantem per cap opció
         else:
             return ''
 
     def laser_callback(self, msg):
-        # durant girs (en_maniobra==1) detecció completament desactivada
+        #treure la detecció durant els girs o quan superem els 5 objectes
         if self.en_maniobra == 1 or self.objectes >= 5:
             return
 
