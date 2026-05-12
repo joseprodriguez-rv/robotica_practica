@@ -25,7 +25,6 @@
 [moviment_exe-2] [INFO] [1778581773.716784890] [moviment]: [COMPROVAR] tipus_obstacle='PARET'  estat_actual=13  estat_seguent=14  len(laser)=360
 [moviment_exe-2] [WARN] [1778581773.717391832] [moviment]: [CALCULAR] entrant. len(laser_ranges)=360
 [moviment_exe-2] [WARN] [1778581773.718039252] [moviment]: [CALCULAR] num_esq=89  num_dre=90  -> -1 (dreta)
-[moviment_exe-2] [WARN] [1778581773.718504546] [moviment]: PARET detectada -> Alineant amb paret i girant 45° cap a la DRETA
 [moviment_exe-2] [INFO] [1778581773.817437640] [moviment]: [ESTAT 1] PARET - Gir 150° cap al costat lliure
 [moviment_exe-2] [INFO] [1778581779.417622759] [moviment]: [COMPROVAR] tipus_obstacle=None  estat_actual=1  estat_seguent=0  len(laser)=360
 [moviment_exe-2] [INFO] [1778581779.516833404] [moviment]: [ESTAT 0] EXPLORAR en linia recta
