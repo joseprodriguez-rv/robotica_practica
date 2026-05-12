@@ -12,7 +12,7 @@ import math
 class MovimentNode(Node):
     def __init__(self):
         super().__init__('controlador_moviment')
-
+    
         qos_sensor = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
@@ -27,19 +27,19 @@ class MovimentNode(Node):
             depth=10
         )
 
-        # Subscripcions
+        #subscripcions
         self.sub_laser = self.create_subscription(LaserScan, '/scan', self.laser_callback, qos_sensor)
         self.sub_odom = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.sub_comptador = self.create_subscription(Int32, '/comptador_objectes', self.comptador_callback, 10)
         self.sub_tipus = self.create_subscription(String, '/tipus_obstacle', self.tipus_callback, 10)
         self.timer = self.create_timer(0.1, self.control_callback)
 
-        # Publicador
+        #publicador de velocitat i maniobres per detecció i el robot en si
         self.pub = self.create_publisher(TwistStamped, '/cmd_vel', qos_moviment)
         self.pub_maniobra = self.create_publisher(Int32, '/en_maniobra', 10)  # flag per a deteccio
         self.get_logger().info('Node de moviment actiu...')
 
-        #  Variables per saber estat
+        #  variables per saber estat
         self.estat = 0
         self.estat_loguejat = None  # canvia quan hi ha canvis en l'estat
         self.cicles = 0
@@ -47,7 +47,7 @@ class MovimentNode(Node):
         self.tipus_obstacle = None
         self.direccio_esquivar = -1  # +1=esquerra, -1=dreta (decidit pel laser)
         self.direccio_paret = -1     # +1=esquerra, -1=dreta (decidit pel laser)
-        self.laser_ranges = []      # última lectura del làser
+        self.laser_ranges = []      #última lectura del làser
 
         # Odometria per als girs
         self.angle_actual = 0.0     # yaw actual del robot
@@ -72,7 +72,6 @@ class MovimentNode(Node):
             self.get_logger().info(f'[ESTAT {self.estat}] {nom}')
             self.estat_loguejat = self.estat
 
-    # Callbacks
     def laser_callback(self, msg):
         self.laser_ranges = msg.ranges  # guardem per usar al control_callback
 
@@ -95,11 +94,11 @@ class MovimentNode(Node):
             self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
     def iniciar_gir(self):
-        """Guardar angle inicial quan comença un gir"""
+        #guardar angle inicial quan comença un gir
         self.angle_inici_gir = self.angle_actual
 
     def angle_girat(self):
-        """Retorna quants radians hem girat des de angle_inici_gir (sempre positiu)"""
+        #per saber quants radians s'ha girat des de l'inici
         if self.angle_inici_gir is None:
             return 0.0
         diff = self.angle_actual - self.angle_inici_gir
@@ -108,13 +107,9 @@ class MovimentNode(Node):
         return abs(diff)
 
     def calcular_costat_lliure(self):
-        """Decideix cap a quin costat hi ha més espai lliure - 180° frontals.
-
-        Convenció (alineada amb angular.z de ROS2):
-          +1 = esquerra (angular.z positiu = gir antihorari = esquerra)
-          -1 = dreta    (angular.z negatiu = gir horari    = dreta)
-        """
-        # DEBUG: log incondicional d'entrada (per saber si la funció s'executa)
+        #decidir cap a quin costat hi ha més espai
+        #+1 esquerra, -1 dreta 
+        #per veure a la terminal
         self.get_logger().warn(f'[CALCULAR] entrant. len(laser_ranges)={len(self.laser_ranges)}')
         if len(self.laser_ranges) >= 360:
             dreta = self.laser_ranges[270:360]
@@ -128,15 +123,14 @@ class MovimentNode(Node):
                 f'-> {"+1 (esquerra)" if num_esq > num_dre else "-1 (dreta)"}'
             )
             if num_esq > num_dre:
-                return 1   # més espai a l'esquerra -> anar a l'esquerra
+                return 1   #més espai a l'esquerra -> anar a l'esquerra
             else:
-                return -1  # més espai a la dreta -> anar a la dreta
+                return -1  #més espai a la dreta -> anar a la dreta
         self.get_logger().warn(f'[CALCULAR] retornant -1 per defecte (len < 360)')
-        return -1  # per defecte (dreta)
+        return -1  #per defecte (dreta)
 
     def comprovar_obstacle(self, estat_seguent):
-        """Al final de cada gir o avanç, comprova si hi ha obstacle i reacciona"""
-        # DEBUG: traçar cada crida i la decisió que pren
+        #comprovar si hi ha un obstacle després de cada gir o avançament, per evitar xocs
         self.get_logger().info(
             f'[COMPROVAR] tipus_obstacle={self.tipus_obstacle!r}  '
             f'estat_actual={self.estat}  estat_seguent={estat_seguent}  '
@@ -159,7 +153,7 @@ class MovimentNode(Node):
         else:
             self.estat = estat_seguent
             self.cicles = 0
-            if estat_seguent in (10, 12, 14, 16):  # si el seguent és un gir, iniciar
+            if estat_seguent in (10, 12, 14, 16):  #si el seguent és un gir, iniciar
                 self.iniciar_gir()
 
     def control_callback(self):
@@ -169,14 +163,13 @@ class MovimentNode(Node):
 
         self.log_estat()
 
-        # Regla d'or: durant els girs detecció OFF, durant avanços detecció ON
         en_maniobra = Int32()
         if self.estat in (1, 10, 12, 14, 16):
-            en_maniobra.data = 1   # girant -> detecció OFF
+            en_maniobra.data = 1   #girant - detecció desactivada
         elif self.estat in (11, 13, 15):
-            en_maniobra.data = 2   # avançant en esquiva -> llindar reduït
+            en_maniobra.data = 2   #avançant en esquiva - llindar reduït
         else:
-            en_maniobra.data = 0   # explorant -> detecció normal
+            en_maniobra.data = 0   # explorant - detecció normal
         self.pub_maniobra.publish(en_maniobra)
 
         #  ESTAT FINAL
