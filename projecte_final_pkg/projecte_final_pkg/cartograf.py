@@ -11,10 +11,11 @@ class CartografNode(Node):
         self.mapa = []
         self.comptador_oficial = 0
 
+        #subscripció a detecció per saber les posicions dels objectes i poder comptar-los
         self.sub_deteccio = self.create_subscription(
             Odometry, '/objecte_detectat', self.callback, 10
         )
-
+        #creació del publisher comptador
         self.pub_cartograf = self.create_publisher(
             Int32, '/comptador_objectes', 10
         )
@@ -23,8 +24,7 @@ class CartografNode(Node):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
 
-        # 0.30m — suficient per absorbir soroll d'odometria
-        # però prou petit per distingir objectes propers (ampolles, estoigs)
+        #ens serveix per distingir objectes propers (ampolles, estoigs) i absorvir el soroll
         radi_proximitat = 0.30
 
         # filtrem deteccions repetides
@@ -32,7 +32,7 @@ class CartografNode(Node):
             math.sqrt((x - obj[0])**2 + (y - obj[1])**2) < radi_proximitat
             for obj in self.mapa
         )
-
+        #si no és repetit el podem posar en el mapa i actualitzar i publicar el comptador
         if not es_repetit:
             self.mapa.append((x, y))
 
@@ -41,6 +41,7 @@ class CartografNode(Node):
             msg_comptador.data = self.comptador_oficial
             self.pub_cartograf.publish(msg_comptador)
 
+            #per la terminal
             self.get_logger().info(f'Objecte #{self.comptador_oficial} registrat a X={x:.2f}, Y={y:.2f}')
         else:
             self.get_logger().info(f'Nova detecció massa prop. Descartat a X={x:.2f}, Y={y:.2f}')
