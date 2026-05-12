@@ -45,7 +45,7 @@ class DeteccioNode(Node):
         self.pub_objecte = self.create_publisher(Odometry, '/objecte_detectat', 10)
         self.pub_tipus = self.create_publisher(String, '/tipus_obstacle', 10)
 
-        self.get_logger().info('Node de Detecció actiu')
+        self.get_logger().info('Node de detecció actiu...')
 
     def odom_callback(self, msg):
         #posició actual
@@ -77,7 +77,7 @@ class DeteccioNode(Node):
         # Si el centre té coses a prop però l'anell NO -> objecte petit centrat.
         # Si tant el centre com l'anell tenen coses a prop -> paret (continua).
         llindar_centre = 0.40
-        llindar_anell  = 0.60
+        llindar_anell = 0.60
 
         # Centre: ±20° (40 rajos)
         centre = list(msg.ranges[0:20]) + list(msg.ranges[340:360])
@@ -91,7 +91,7 @@ class DeteccioNode(Node):
 
         # Proporcions (evitant divisions per zero)
         prop_centre = len(propers_centre) / len(centre_valids) if centre_valids else 0.0
-        prop_anell  = len(propers_anell)  / len(anell_valids)  if anell_valids  else 0.0
+        prop_anell = len(propers_anell) / len(anell_valids) if anell_valids else 0.0
 
         # Criteris mutuament excloents:
         #   PARET   = el centre està mig ple I l'anell també està mig ple
@@ -99,8 +99,8 @@ class DeteccioNode(Node):
         #   OBJECTE = el centre té alguna cosa I l'anell està majoritàriament lliure
         #             (l'obstacle es limita al davant)
         #   ''      = qualsevol altre cas (ambigu, no actuem)
-        centre_ple = prop_centre > 0.50
-        anell_ple  = prop_anell  > 0.50
+        centre_ple = prop_centre > 0.40
+        anell_ple = prop_anell > 0.40
 
         self.get_logger().info(
             f'[CLASS] centre={len(propers_centre)}/{len(centre_valids)} ({prop_centre:.0%})  '
@@ -109,7 +109,7 @@ class DeteccioNode(Node):
 
         if centre_ple and anell_ple:
             return 'PARET'
-        elif centre_ple and not anell_ple:
+        elif (centre_ple and not anell_ple) or (anell_ple and not centre_ple):
             return 'OBJECTE'
         else:
             return ''
@@ -134,7 +134,7 @@ class DeteccioNode(Node):
 
         if len(distancies_valides) > 0:
             distancia_min = min(distancies_valides)
-            llindar = 0.20 if self.en_maniobra == 2 else 0.25
+            llindar = 0.25 if self.en_maniobra == 2 else 0.30
 
             #si detectem un obstacle a prop
             if distancia_min < llindar:
@@ -162,7 +162,6 @@ class DeteccioNode(Node):
 
         msg_obj = Odometry()
         msg_obj.header.stamp = self.get_clock().now().to_msg()
-        msg_obj.header.frame_id = 'map'
         msg_obj.pose.pose.position.x = float(obj_x)
         msg_obj.pose.pose.position.y = float(obj_y)
 
