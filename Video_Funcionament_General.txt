@@ -1,4 +1,3 @@
-ros2 launch projecte_final_pkg projecte.launch.py 
 [INFO] [launch]: All log files can be found below /home/rob/.ros/log/2026-05-12-09-52-22-139369-c5s202pc108-6470
 [INFO] [launch]: Default logging verbosity is set to INFO
 [INFO] [deteccio_exe-1]: process started with pid [6473]
