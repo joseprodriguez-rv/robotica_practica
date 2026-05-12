@@ -23,9 +23,9 @@ class CartografNode(Node):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
 
-        # 0.35m — suficient per absorbir soroll d'odometria
+        # 0.30m — suficient per absorbir soroll d'odometria
         # però prou petit per distingir objectes propers (ampolles, estoigs)
-        radi_proximitat = 0.35
+        radi_proximitat = 0.30
 
         # filtrem deteccions repetides
         es_repetit = any(
