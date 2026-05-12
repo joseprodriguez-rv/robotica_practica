@@ -130,33 +130,6 @@ graph TD
 
 ---
 
-## Flux de dades entre nodes
-
-```mermaid
-graph TD
-    scan[/scan/] --> deteccio
-    scan --> moviment
-    odom[/odom/] --> deteccio
-    odom --> moviment
-    en_maniobra[/en_maniobra/] --> deteccio
-    comptador[/comptador_objectes/] --> deteccio
-    comptador --> moviment
-
-    deteccio --> tipus_obstacle[/tipus_obstacle/]
-    deteccio --> objecte_detectat[/objecte_detectat/]
-
-    tipus_obstacle --> moviment
-    objecte_detectat --> cartograf
-
-    cartograf --> comptador
-    moviment --> cmd_vel[/cmd_vel/]
-    moviment --> en_maniobra
-
-    cmd_vel --> robot((TurtleBot3))
-```
-
----
-
 ## Estats del moviment
 
 | Estat  | Descripció                                       | Detecció activa |
