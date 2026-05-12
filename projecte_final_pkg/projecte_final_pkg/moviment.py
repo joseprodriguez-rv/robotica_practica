@@ -27,7 +27,7 @@ class MovimentNode(Node):
             depth=10
         )
 
-        #subscripcions
+        #subscripcions, en aquestes apereixen les subscripcions de base més les relacionades amb els altres dos nodes
         self.sub_laser = self.create_subscription(LaserScan, '/scan', self.laser_callback, qos_sensor)
         self.sub_odom = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.sub_comptador = self.create_subscription(Int32, '/comptador_objectes', self.comptador_callback, 10)
@@ -39,15 +39,15 @@ class MovimentNode(Node):
         self.pub_maniobra = self.create_publisher(Int32, '/en_maniobra', 10)  # flag per a deteccio
         self.get_logger().info('Node de moviment actiu...')
 
-        #  variables per saber estat
+        #  variables per saber estat i variables de la classe
         self.estat = 0
-        self.estat_loguejat = None  # canvia quan hi ha canvis en l'estat
-        self.cicles = 0
-        self.objectes = 0
-        self.tipus_obstacle = None
-        self.direccio_esquivar = -1  # +1=esquerra, -1=dreta (decidit pel laser)
-        self.direccio_paret = -1     # +1=esquerra, -1=dreta (decidit pel laser)
-        self.laser_ranges = []      #última lectura del làser
+        self.estat_loguejat = None   # canvia quan hi ha canvis en l'estat
+        self.cicles = 0              # cicles maniobres 
+        self.objectes = 0            # counter
+        self.tipus_obstacle = None   # paret / obstacle
+        self.direccio_esquivar = -1  # +1=esquerra, -1=dreta
+        self.direccio_paret = -1     # +1=esquerra, -1=dreta
+        self.laser_ranges = []       #última lectura del làser
 
         # Odometria per als girs
         self.angle_actual = 0.0     # yaw actual del robot
@@ -73,7 +73,7 @@ class MovimentNode(Node):
             self.estat_loguejat = self.estat
 
     def laser_callback(self, msg):
-        self.laser_ranges = msg.ranges  # guardem per usar al control_callback
+        self.laser_ranges = msg.ranges  # guardem laser cada cop
 
     def odom_callback(self, msg):
         # Convertir quaternion -> yaw
@@ -94,7 +94,7 @@ class MovimentNode(Node):
             self.tipus_obstacle = msg.data  # 'PARET' o 'OBJECTE'
 
     def iniciar_gir(self):
-        #guardar angle inicial quan comença un gir
+        #guardar angle inicial
         self.angle_inici_gir = self.angle_actual
 
     def angle_girat(self):
@@ -107,9 +107,8 @@ class MovimentNode(Node):
         return abs(diff)
 
     def calcular_costat_lliure(self):
-        #decidir cap a quin costat hi ha més espai
+        #quin costat hi ha més espai
         #+1 esquerra, -1 dreta 
-        #per veure a la terminal
         self.get_logger().warn(f'[CALCULAR] entrant. len(laser_ranges)={len(self.laser_ranges)}')
         if len(self.laser_ranges) >= 360:
             dreta = self.laser_ranges[270:360]
@@ -130,7 +129,8 @@ class MovimentNode(Node):
         return -1  #per defecte (dreta)
 
     def comprovar_obstacle(self, estat_seguent):
-        #comprovar si hi ha un obstacle després de cada gir o avançament, per evitar xocs
+        #comprovar si hi ha un obstacle després de cada maniobres
+        #evitar xocs
         self.get_logger().info(
             f'[COMPROVAR] tipus_obstacle={self.tipus_obstacle!r}  '
             f'estat_actual={self.estat}  estat_seguent={estat_seguent}  '
@@ -138,8 +138,6 @@ class MovimentNode(Node):
         )
         if self.tipus_obstacle == 'PARET':
             self.direccio_paret = self.calcular_costat_lliure()
-            self.get_logger().warn(f'PARET detectada -> Alineant amb paret i girant 45° cap a {
-                "l\'ESQUERRA" if self.direccio_paret == 1 else "la DRETA"}')
             self.tipus_obstacle = None
             self.estat = 1
             self.iniciar_gir()
@@ -157,6 +155,7 @@ class MovimentNode(Node):
                 self.iniciar_gir()
 
     def control_callback(self):
+        #moviment
         cmd = TwistStamped()
         cmd.header.stamp = self.get_clock().now().to_msg()
         cmd.header.frame_id = 'base_link'
