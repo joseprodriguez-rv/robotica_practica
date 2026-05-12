@@ -1,0 +1,53 @@
+[INFO] [launch]: All log files can be found below /home/rob/.ros/log/2026-05-12-12-29-21-348738-c5s202pc108-6181
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [deteccio_exe-1]: process started with pid [6184]
+[INFO] [moviment_exe-2]: process started with pid [6185]
+[INFO] [cartograf_exe-3]: process started with pid [6186]
+[deteccio_exe-1] [INFO] [1778581761.722727668] [deteccio]: Node de detecció actiu...
+[moviment_exe-2] [INFO] [1778581761.724597417] [moviment]: Node de moviment actiu...
+[moviment_exe-2] [INFO] [1778581761.816787345] [moviment]: [ESTAT 0] EXPLORAR en linia recta
+[deteccio_exe-1] [INFO] [1778581762.857506507] [deteccio]: [CLASS] centre=10/38 (26%)  anell=0/80 (0%)
+[deteccio_exe-1] [WARN] [1778581762.858769141] [deteccio]: Objecte detectat a 0.30m
+[cartograf_exe-3] [INFO] [1778581762.872034213] [cartograf]: Objecte #1 registrat a X=-0.36, Y=-0.26
+[moviment_exe-2] [INFO] [1778581762.916361273] [moviment]: [COMPROVAR] tipus_obstacle='OBJECTE'  estat_actual=0  estat_seguent=0  len(laser)=360
+[moviment_exe-2] [WARN] [1778581762.916691671] [moviment]: [CALCULAR] entrant. len(laser_ranges)=360
+[moviment_exe-2] [WARN] [1778581762.917167359] [moviment]: [CALCULAR] num_esq=90  num_dre=88  -> +1 (esquerra)
+[moviment_exe-2] [WARN] [1778581762.917527099] [moviment]: OBJECTE detectat -> Esquivant cap a l'ESQUERRA
+[moviment_exe-2] [INFO] [1778581763.016993953] [moviment]: [ESTAT 10] ESQUIVA - Gir 90 cap al costat lliure
+[moviment_exe-2] [INFO] [1778581766.517558910] [moviment]: [COMPROVAR] tipus_obstacle=None  estat_actual=10  estat_seguent=11  len(laser)=360
+[moviment_exe-2] [INFO] [1778581766.617153704] [moviment]: [ESTAT 11] ESQUIVA - Avancar lateral
+[moviment_exe-2] [INFO] [1778581767.717557751] [moviment]: [COMPROVAR] tipus_obstacle=None  estat_actual=11  estat_seguent=12  len(laser)=360
+[moviment_exe-2] [INFO] [1778581767.817074398] [moviment]: [ESTAT 12] ESQUIVA - GIr 90 cap al contrari
+[moviment_exe-2] [INFO] [1778581771.317295175] [moviment]: [COMPROVAR] tipus_obstacle=None  estat_actual=12  estat_seguent=13  len(laser)=360
+[moviment_exe-2] [INFO] [1778581771.417075270] [moviment]: [ESTAT 13] ESQUIVA - Avancar superar objecte
+[deteccio_exe-1] [INFO] [1778581773.694426967] [deteccio]: [CLASS] centre=40/40 (100%)  anell=77/80 (96%)
+[deteccio_exe-1] [INFO] [1778581773.695429863] [deteccio]: PARET detectada
+[moviment_exe-2] [INFO] [1778581773.716784890] [moviment]: [COMPROVAR] tipus_obstacle='PARET'  estat_actual=13  estat_seguent=14  len(laser)=360
+[moviment_exe-2] [WARN] [1778581773.717391832] [moviment]: [CALCULAR] entrant. len(laser_ranges)=360
+[moviment_exe-2] [WARN] [1778581773.718039252] [moviment]: [CALCULAR] num_esq=89  num_dre=90  -> -1 (dreta)
+[moviment_exe-2] [WARN] [1778581773.718504546] [moviment]: PARET detectada -> Alineant amb paret i girant 45° cap a la DRETA
+[moviment_exe-2] [INFO] [1778581773.817437640] [moviment]: [ESTAT 1] PARET - Gir 150° cap al costat lliure
+[moviment_exe-2] [INFO] [1778581779.417622759] [moviment]: [COMPROVAR] tipus_obstacle=None  estat_actual=1  estat_seguent=0  len(laser)=360
+[moviment_exe-2] [INFO] [1778581779.516833404] [moviment]: [ESTAT 0] EXPLORAR en linia recta
+[deteccio_exe-1] [INFO] [1778581779.713454321] [deteccio]: [CLASS] centre=11/17 (65%)  anell=0/42 (0%)
+[deteccio_exe-1] [WARN] [1778581779.714456252] [deteccio]: Objecte detectat a 0.29m
+[cartograf_exe-3] [INFO] [1778581779.715303463] [cartograf]: Nova detecció massa prop. Descartat a X=-0.27, Y=-0.30
+[moviment_exe-2] [INFO] [1778581779.716015139] [moviment]: [COMPROVAR] tipus_obstacle='OBJECTE'  estat_actual=0  estat_seguent=0  len(laser)=360
+[moviment_exe-2] [WARN] [1778581779.716214334] [moviment]: [CALCULAR] entrant. len(laser_ranges)=360
+[moviment_exe-2] [WARN] [1778581779.716428302] [moviment]: [CALCULAR] num_esq=75  num_dre=36  -> +1 (esquerra)
+[moviment_exe-2] [WARN] [1778581779.716631878] [moviment]: OBJECTE detectat -> Esquivant cap a l'ESQUERRA
+[moviment_exe-2] [INFO] [1778581779.817151715] [moviment]: [ESTAT 10] ESQUIVA - Gir 90 cap al costat lliure
+[moviment_exe-2] [INFO] [1778581783.317383782] [moviment]: [COMPROVAR] tipus_obstacle=None  estat_actual=10  estat_seguent=11  len(laser)=360
+[moviment_exe-2] [INFO] [1778581783.417428156] [moviment]: [ESTAT 11] ESQUIVA - Avancar lateral
+[deteccio_exe-1] [INFO] [1778581783.523839714] [deteccio]: [CLASS] centre=24/40 (60%)  anell=40/79 (51%)
+[deteccio_exe-1] [INFO] [1778581783.524643004] [deteccio]: PARET detectada
+[moviment_exe-2] [INFO] [1778581783.617580889] [moviment]: [COMPROVAR] tipus_obstacle='PARET'  estat_actual=11  estat_seguent=12  len(laser)=360
+[moviment_exe-2] [WARN] [1778581783.618498055] [moviment]: [CALCULAR] entrant. len(laser_ranges)=360
+[moviment_exe-2] [WARN] [1778581783.619411435] [moviment]: [CALCULAR] num_esq=90  num_dre=76  -> +1 (esquerra)
+[moviment_exe-2] [WARN] [1778581783.620135954] [moviment]: PARET detectada -> Alineant amb paret i girant 45° cap a l'ESQUERRA
+[moviment_exe-2] [INFO] [1778581783.717090222] [moviment]: [ESTAT 1] PARET - Gir 150° cap al costat lliure
+[moviment_exe-2] [INFO] [1778581789.317299892] [moviment]: [COMPROVAR] tipus_obstacle=None  estat_actual=1  estat_seguent=0  len(laser)=360
+[moviment_exe-2] [INFO] [1778581789.417165343] [moviment]: [ESTAT 0] EXPLORAR en linia recta
+[deteccio_exe-1] [INFO] [1778581789.542641136] [deteccio]: [CLASS] centre=0/39 (0%)  anell=32/48 (67%)
+^C[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[deteccio_exe-1] [INFO] [1778581791.214656532] [deteccio]: Aturant node...
